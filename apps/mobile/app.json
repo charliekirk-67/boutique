@@ -19,7 +19,7 @@
       "package": "com.sanjaipandian.mobile",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDtFSThpLf6U7ZWUaXtuSCs_-sfRIiLF2E"
+          "apiKey": ""
         }
       }
     },
