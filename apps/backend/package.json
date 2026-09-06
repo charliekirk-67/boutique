@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build": "prisma generate && tsc",
+    "build": "npx prisma generate && npx tsc",
     "start": "node dist/index.js",
     "start:pm2": "pm2 start dist/index.js --name marcos-backend --attach",
     "dev": "nodemon --watch src -e ts --exec ts-node src/index.ts",
@@ -30,9 +30,11 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.10",
     "pdfkit": "^0.15.0",
+    "prisma": "^5.22.0",
     "redis": "^4.6.13",
     "socket.io": "^4.7.4",
     "twilio": "^6.0.2",
+    "typescript": "^5.3.3",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
