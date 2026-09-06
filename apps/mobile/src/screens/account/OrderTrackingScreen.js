@@ -45,21 +45,32 @@ import {
 } from 'lucide-react-native';
 
 // ─── Stepper config ──────────────────────────────────────────────────────────
-// PLACEHOLDER: hardcoded estimates — replace with order.expectedDeliveryDate in future sprint
 const STEPS = [
   { key: 'PENDING',          label: 'Product\nBooked',      icon: ShoppingBag,  offsetDays: 0 },
   { key: 'PAID',             label: 'Measurement',          icon: Scissors,     offsetDays: 1 },
   { key: 'PROCESSING',       label: 'Order\nStitching',     icon: Package,      offsetDays: 3 },
   { key: 'SHIPPED',          label: 'Product\nCompleted',   icon: CheckCircle2, offsetDays: 5 },
   { key: 'OUT_FOR_DELIVERY', label: 'Ready to\nDeliver',    icon: Truck,        offsetDays: 7 },
+  { key: 'DELIVERED',        label: 'Delivered',            icon: CheckCircle2, offsetDays: 7 },
 ];
 
-const STATUS_ORDER = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY'];
+const STATUS_ORDER = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
 function getStepIndex(status) {
-  if (status === 'DELIVERED') return STATUS_ORDER.length; // all steps done
   const idx = STATUS_ORDER.indexOf(status);
   return idx === -1 ? 0 : idx;
+}
+
+function getStatusBadgeConfig(status) {
+  switch (status) {
+    case 'DELIVERED': return { bg: '#ecfdf5', border: '#a7f3d0', text: '#059669', dot: '#10b981' };
+    case 'OUT_FOR_DELIVERY': return { bg: '#ecfeff', border: '#a5f3fc', text: '#0891b2', dot: '#06b6d4' };
+    case 'SHIPPED': return { bg: '#f5f3ff', border: '#ddd6fe', text: '#7c3aed', dot: '#8b5cf6' };
+    case 'PROCESSING': return { bg: '#eff6ff', border: '#bfdbfe', text: '#2563eb', dot: '#3b82f6' };
+    case 'PAID': return { bg: '#faf5ff', border: '#f3e8ff', text: '#9333ea', dot: '#a855f7' };
+    case 'CANCELLED': return { bg: '#fef2f2', border: '#fecaca', text: '#dc2626', dot: '#ef4444' };
+    default: return { bg: '#fffbeb', border: '#fef3c7', text: '#d97706', dot: '#f59e0b' };
+  }
 }
 
 function getStatusLabelText(status) {
@@ -164,6 +175,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const [respondingQuick, setRespondingQuick] = useState(false);
   const [isRejectingQuickOrder, setIsRejectingQuickOrder] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
+  const [liveUpdateAlert, setLiveUpdateAlert] = useState(null);
 
   // Rescheduling states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -257,8 +269,18 @@ export default function OrderTrackingScreen({ route, navigation }) {
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
-    const handler = ({ orderId: id }) => {
-      if (id === orderId) loadOrder();
+    const handler = ({ orderId: id, newStatus }) => {
+      if (id === orderId) {
+        if (newStatus) {
+          setOrder(prev => prev ? { ...prev, status: newStatus } : prev);
+          setLiveUpdateAlert({
+            status: newStatus,
+            message: `Order status updated to: ${getOrderStatusLabel(newStatus)}`,
+          });
+          setTimeout(() => setLiveUpdateAlert(null), 7000);
+        }
+        loadOrder();
+      }
     };
     socket.on('order:status_changed', handler);
     return () => socket.off('order:status_changed', handler);
@@ -1162,6 +1184,59 @@ export default function OrderTrackingScreen({ route, navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Live Real-time Status Update Banner */}
+        {liveUpdateAlert && (
+          <View style={{
+            backgroundColor: '#059669',
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderRadius: 16,
+            marginBottom: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            shadowColor: '#059669',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6
+          }}>
+            <CheckCircle2 size={20} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: '#d1fae5', textTransform: 'uppercase', letterSpacing: 0.5 }}>⚡ Live Update From Admin</Text>
+              <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#fff', marginTop: 1 }}>{liveUpdateAlert.message}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setLiveUpdateAlert(null)}>
+              <X size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Prominent Delivered Banner when order is DELIVERED */}
+        {order.status === 'DELIVERED' && (
+          <View style={{
+            backgroundColor: '#ecfdf5',
+            borderColor: '#a7f3d0',
+            borderWidth: 1.5,
+            borderRadius: 20,
+            padding: 16,
+            marginBottom: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 14
+          }}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle2 size={24} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: '#065f46' }}>Order Delivered!</Text>
+              <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: '#047857', marginTop: 2 }}>
+                Your package has been successfully delivered. We hope you love your bespoke apparel!
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* 1. Order Status & Prominent Delivery Date Box */}
         <View style={[styles.metaCard, shadows.premium, { backgroundColor: theme.bg.card, borderWidth: 1, borderColor: theme.border, gap: 14, flexDirection: 'column', alignItems: 'stretch' }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1169,9 +1244,32 @@ export default function OrderTrackingScreen({ route, navigation }) {
               <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
                 CURRENT ORDER STATUS
               </Text>
-              <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: theme.text.primary, marginTop: 4 }}>
-                {getOrderStatusLabel(order.status)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: theme.text.primary }}>
+                  {getOrderStatusLabel(order.status)}
+                </Text>
+                {(() => {
+                  const cfg = getStatusBadgeConfig(order.status);
+                  return (
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 10,
+                      backgroundColor: cfg.bg,
+                      borderWidth: 1,
+                      borderColor: cfg.border
+                    }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: cfg.dot }} />
+                      <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: cfg.text }}>
+                        {order.status}
+                      </Text>
+                    </View>
+                  );
+                })()}
+              </View>
               <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: theme.text.muted, marginTop: 3 }}>
                 Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
               </Text>

@@ -8,6 +8,7 @@ const bullmq_1 = require("bullmq");
 const queue_config_js_1 = require("./queue.config.js");
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const environment_js_1 = require("../config/environment.js");
+const jobs_worker_js_1 = require("./jobs.worker.js");
 let jobsQueue = null;
 exports.jobsQueue = jobsQueue;
 if (!environment_js_1.isDevelopment) {
@@ -39,27 +40,25 @@ class JobsProducer {
     /**
      * Queue PDF Generation job
      */
-    static async queueInvoicePdf(orderId) {
+    static async queueInvoicePdf(orderId, customerEmail, customerName) {
         if (!jobsQueue) {
             logger_js_1.default.info(`[DEV MODE] Generating PDF invoice synchronously for order ${orderId}`);
-            const { handleGenerateInvoicePdf } = await import('./jobs.worker.js');
-            handleGenerateInvoicePdf(orderId).catch(err => logger_js_1.default.error('Failed sync PDF generation:', err));
+            (0, jobs_worker_js_1.handleGenerateInvoicePdf)(orderId, customerEmail, customerName).catch(err => logger_js_1.default.error('Failed sync PDF generation:', err));
             return;
         }
         logger_js_1.default.info(`Queueing PDF generation for order ${orderId}`);
-        await jobsQueue.add('GENERATE_INVOICE_PDF', { orderId });
+        await jobsQueue.add('GENERATE_INVOICE_PDF', { orderId, customerEmail, customerName });
     }
     /**
      * Queue external notifications (Email, SMS, FCM push)
      */
     static async queueNotification(payload) {
         if (!jobsQueue) {
-            logger_js_1.default.info(`[DEV MODE] Sending notification synchronously for user ${payload.userId}`);
-            const { handleSendNotification } = await import('./jobs.worker.js');
-            handleSendNotification(payload).catch(err => logger_js_1.default.error('Failed sync notification dispatch:', err));
+            logger_js_1.default.info(`[DEV MODE] Sending notification synchronously for ${payload.email || payload.userId}`);
+            (0, jobs_worker_js_1.handleSendNotification)(payload).catch(err => logger_js_1.default.error('Failed sync notification dispatch:', err));
             return;
         }
-        logger_js_1.default.info(`Queueing notifications for user ${payload.userId}`);
+        logger_js_1.default.info(`Queueing notifications for ${payload.email || payload.userId}`);
         await jobsQueue.add('SEND_NOTIFICATION', payload);
     }
     /**
@@ -68,8 +67,7 @@ class JobsProducer {
     static async queueCreditReferralPoints(orderId, userId) {
         if (!jobsQueue) {
             logger_js_1.default.info(`[DEV MODE] Crediting points synchronously for order ${orderId}`);
-            const { handleCreditReferralPoints } = await import('./jobs.worker.js');
-            handleCreditReferralPoints(orderId, userId).catch(err => logger_js_1.default.error('Failed sync points credit:', err));
+            (0, jobs_worker_js_1.handleCreditReferralPoints)(orderId, userId).catch(err => logger_js_1.default.error('Failed sync points credit:', err));
             return;
         }
         logger_js_1.default.info(`Queueing referral/loyalty point credit for order ${orderId}, user ${userId}`);

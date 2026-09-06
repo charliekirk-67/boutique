@@ -28,7 +28,8 @@ import {
   LineChart,
   Briefcase,
   Printer,
-  PlayCircle
+  PlayCircle,
+  UserCheck
 } from 'lucide-react';
 import { PRODUCT_NAME, PRODUCT_VERSION } from '../config/productName';
 import api from '../utils/api';
@@ -170,6 +171,7 @@ export default function Sidebar({
       items: [
         { id: 'customers', label: 'Customers & Sizing', icon: Users },
         { id: 'app-customers', label: 'App Customers', icon: UsersRound },
+        { id: 'staff', label: 'Team & Tailors', icon: UserCheck },
         { id: 'stores', label: 'Store Locations', icon: MapPin },
         { id: 'support', label: 'Support Tickets', icon: LifeBuoy },
       ]

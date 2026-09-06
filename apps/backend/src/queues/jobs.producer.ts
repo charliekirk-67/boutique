@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 import { connectionOptions, QUEUE_NAME } from './queue.config.js';
 import logger from '../utils/logger.js';
 import { isDevelopment } from '../config/environment.js';
+import { handleGenerateInvoicePdf, handleSendNotification, handleCreditReferralPoints } from './jobs.worker.js';
 
 let jobsQueue: Queue | null = null;
 
@@ -34,15 +35,14 @@ export class JobsProducer {
   /**
    * Queue PDF Generation job
    */
-  static async queueInvoicePdf(orderId: string) {
+  static async queueInvoicePdf(orderId: string, customerEmail?: string, customerName?: string) {
     if (!jobsQueue) {
       logger.info(`[DEV MODE] Generating PDF invoice synchronously for order ${orderId}`);
-      const { handleGenerateInvoicePdf } = await import('./jobs.worker.js');
-      handleGenerateInvoicePdf(orderId).catch(err => logger.error('Failed sync PDF generation:', err));
+      handleGenerateInvoicePdf(orderId, customerEmail, customerName).catch(err => logger.error('Failed sync PDF generation:', err));
       return;
     }
     logger.info(`Queueing PDF generation for order ${orderId}`);
-    await jobsQueue.add('GENERATE_INVOICE_PDF', { orderId });
+    await jobsQueue.add('GENERATE_INVOICE_PDF', { orderId, customerEmail, customerName });
   }
 
   /**
@@ -50,6 +50,8 @@ export class JobsProducer {
    */
   static async queueNotification(payload: {
     userId: string;
+    email?: string;
+    phone?: string;
     channels: ('EMAIL' | 'SMS' | 'PUSH')[];
     templates: {
       email?: { id: string; data: any };
@@ -58,12 +60,11 @@ export class JobsProducer {
     };
   }) {
     if (!jobsQueue) {
-      logger.info(`[DEV MODE] Sending notification synchronously for user ${payload.userId}`);
-      const { handleSendNotification } = await import('./jobs.worker.js');
+      logger.info(`[DEV MODE] Sending notification synchronously for ${payload.email || payload.userId}`);
       handleSendNotification(payload).catch(err => logger.error('Failed sync notification dispatch:', err));
       return;
     }
-    logger.info(`Queueing notifications for user ${payload.userId}`);
+    logger.info(`Queueing notifications for ${payload.email || payload.userId}`);
     await jobsQueue.add('SEND_NOTIFICATION', payload);
   }
 
@@ -73,7 +74,6 @@ export class JobsProducer {
   static async queueCreditReferralPoints(orderId: string, userId: string) {
     if (!jobsQueue) {
       logger.info(`[DEV MODE] Crediting points synchronously for order ${orderId}`);
-      const { handleCreditReferralPoints } = await import('./jobs.worker.js');
       handleCreditReferralPoints(orderId, userId).catch(err => logger.error('Failed sync points credit:', err));
       return;
     }

@@ -475,17 +475,22 @@ class OrderController {
                         triggeredBy: req.user.fullName,
                     },
                 });
-                // Emit real-time update to the customer's personal socket room
-                if (order.userId) {
-                    const io = (0, socket_handler_js_1.getIO)();
-                    if (io) {
-                        io.to(`user:${order.userId}`).emit('order:status_changed', {
-                            orderId: order.id,
-                            invoiceNumber: order.invoiceNumber,
-                            newStatus: status,
-                            updatedAt: new Date(),
-                        });
+                // Emit real-time update to customer, order room, and broadcast
+                const io = (0, socket_handler_js_1.getIO)();
+                if (io) {
+                    const statusPayload = {
+                        orderId: order.id,
+                        invoiceNumber: order.invoiceNumber,
+                        newStatus: status,
+                        updatedAt: new Date(),
+                    };
+                    if (order.userId) {
+                        io.to(`user:${order.userId}`).emit('order:status_changed', statusPayload);
                     }
+                    io.to(`order:${order.id}`).emit('order:status_changed', statusPayload);
+                    io.emit('order:status_changed', statusPayload);
+                }
+                if (order.userId) {
                     // Queue push notification for status update
                     await jobs_producer_js_1.default.queueNotification({
                         userId: order.userId,
@@ -516,6 +521,10 @@ class OrderController {
             if (order.userId) {
                 await invalidateUserOrdersCache(order.userId);
             }
+            try {
+                await redis_js_1.default.del(`cache:order:${order.id}`, `cache:orders:${order.id}`);
+            }
+            catch (e) { }
             return res.status(200).json({
                 success: true,
                 message: 'Order status updated successfully',

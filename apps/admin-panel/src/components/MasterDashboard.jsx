@@ -649,58 +649,13 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
       {/* ── Date Details Section ── */}
       <div className="space-y-6">
-        {/* Top 2 Columns: Orders Received & Appointments Scheduled */}
+        {/* Top 2 Columns: Client Priority 1 & 2: Appointments Scheduled & Orders to be Delivered Today */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Orders Received List */}
-          <div className="bg-white rounded-3xl p-6 shadow-premium">
-            <SH
-              title={`Orders Received`}
-              sub={`${ds.ordersReceived} orders on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
-              action={
-                <button 
-                  onClick={() => {
-                    sessionStorage.setItem('admin_order_status_filter', 'ALL');
-                    sessionStorage.setItem('admin_order_date_filter', selectedDate);
-                    setActiveTab?.('orders-bookings');
-                  }} 
-                  className="text-[10px] font-bold text-brand-600 hover:underline"
-                >
-                  View all →
-                </button>
-              }
-            />
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {ds.ordersList?.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <ShoppingCart className="w-8 h-8 mx-auto mb-2 text-slate-200" />
-                  <p className="text-xs font-semibold">No orders received on this date</p>
-                </div>
-              ) : ds.ordersList?.map(o => (
-                <div 
-                  key={o.id} 
-                  onClick={() => setSelectedOrderModal(o)}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 border border-slate-100 hover:bg-brand-50/40 transition-colors cursor-pointer group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                      {o.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Appointments List */}
-          <div className="bg-white rounded-3xl p-6 shadow-premium">
+          {/* Box 1: Appointments Scheduled */}
+          <div className="bg-white rounded-3xl p-6 shadow-premium border border-blue-100/60">
             <SH
               title={`Appointments Scheduled`}
-              sub={`${ds.appointmentsList?.length || 0} on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+              sub={`${ds.appointmentsList?.length || 0} scheduled on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
               action={
                 <button 
                   onClick={() => {
@@ -708,9 +663,10 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                     sessionStorage.setItem('admin_appt_date_filter', selectedDate);
                     setActiveTab?.('orders-fittings');
                   }} 
-                  className="text-[10px] font-bold text-blue-600 hover:underline"
+                  className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"
                 >
-                  View all →
+                  <span>View all</span>
+                  <span>→</span>
                 </button>
               }
             />
@@ -754,6 +710,115 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                 );
               })}
             </div>
+          </div>
+
+          {/* Box 2: Orders to be Delivered Today / On Selected Date (Replaces old unknown box position) */}
+          <div className="bg-white rounded-3xl p-6 shadow-premium border border-amber-200/80">
+            <SH
+              title={`Orders to be Delivered Today`}
+              sub={`${ds.deliveriesPromisedList?.length || 0} order${ds.deliveriesPromisedList?.length === 1 ? '' : 's'} on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+              action={
+                <button 
+                  onClick={() => {
+                    sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
+                    setActiveTab?.('orders-bookings');
+                  }} 
+                  className="text-[10px] font-bold text-amber-700 hover:underline flex items-center gap-1"
+                >
+                  <span>View all</span>
+                  <span>→</span>
+                </button>
+              }
+            />
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {ds.deliveriesPromisedList?.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Truck className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                  <p className="text-xs font-semibold">No orders scheduled for delivery on this date</p>
+                </div>
+              ) : ds.deliveriesPromisedList?.slice(0, 10).map(o => (
+                <div 
+                  key={o.id} 
+                  onClick={() => setSelectedOrderModal(o)}
+                  className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/30 border border-amber-100/70 hover:bg-amber-50/80 transition-colors cursor-pointer group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-amber-900 transition-colors truncate">{o.invoiceNumber}</p>
+                      <span className="text-[9px] text-slate-400 font-semibold truncate hidden sm:inline">
+                        {o.items?.length || 1} item{o.items?.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                      {o.user?.fullName || o.customerName || 'Customer'}
+                      {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
+                        <span className="text-slate-400 ml-1.5 font-medium">· 📞 {o.user?.phoneNumber || o.shippingAddress?.phone}</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
+                    <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border shadow-2xs ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                      {o.status?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Relocated Box: Orders Received (Placed on this date) ── */}
+        <div className="bg-white rounded-3xl p-6 shadow-premium border border-slate-200/70">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#3D2E3D]">Orders Received on this Date</h3>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  {ds.ordersReceived} new order{ds.ordersReceived === 1 ? '' : 's'} placed on {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                sessionStorage.setItem('admin_order_status_filter', 'ALL');
+                sessionStorage.setItem('admin_order_date_filter', selectedDate);
+                setActiveTab?.('orders-bookings');
+              }} 
+              className="text-[11px] font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100/70 px-3 py-1.5 rounded-xl border border-brand-200/60 transition-colors self-start sm:self-auto flex items-center gap-1"
+            >
+              <span>View in Order Manager</span>
+              <span>→</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto pr-1">
+            {ds.ordersList?.length === 0 ? (
+              <div className="col-span-full text-center py-6 text-slate-400">
+                <ShoppingCart className="w-7 h-7 mx-auto mb-1.5 text-slate-200" />
+                <p className="text-xs font-semibold">No orders received on this date</p>
+              </div>
+            ) : ds.ordersList?.map(o => (
+              <div 
+                key={o.id} 
+                onClick={() => setSelectedOrderModal(o)}
+                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/70 border border-slate-100 hover:bg-brand-50/40 hover:border-brand-200/60 transition-all cursor-pointer group shadow-2xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                  <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
+                  <span className={`text-[8.5px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {o.status}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

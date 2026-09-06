@@ -28,6 +28,7 @@ import AppCustomerManager from './components/AppCustomerManager';
 import StoreLocationManager from './components/StoreLocationManager';
 import PromoContentManager from './components/PromoContentManager';
 import BookingsAppointments from './components/BookingsAppointments';
+import StaffManager from './components/StaffManager';
 
 import api from './utils/api';
 
@@ -252,6 +253,12 @@ export default function App() {
         {mountedTabs['settings'] && (
           <div className={isBaseMatch('settings') ? 'block' : 'hidden'}>
             <SettingsManager isActive={isBaseMatch('settings')} />
+          </div>
+        )}
+
+        {mountedTabs['staff'] && (
+          <div className={isBaseMatch('staff') ? 'block' : 'hidden'}>
+            <StaffManager isActive={isBaseMatch('staff')} />
           </div>
         )}
       </>

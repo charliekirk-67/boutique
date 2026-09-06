@@ -96,10 +96,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
   const [hasMoreVisits, setHasMoreVisits] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Initialize default date (tomorrow if evening)
+  const getInitialBookingDate = () => {
+    const d = new Date();
+    if (d.getHours() >= 18) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d;
+  };
+
   // Calendar modal states
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(getInitialBookingDate());
   
   // Form states
   const [apptCategory, setApptCategory] = useState('');
@@ -124,7 +133,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   // Slot Booking States
   const [slotModalVisible, setSlotModalVisible] = useState(false);
-  const [slotDate, setSlotDate] = useState(null);
+  const [slotDate, setSlotDate] = useState(getInitialBookingDate());
   const [slotTime, setSlotTime] = useState('');
   const [slotDescription, setSlotDescription] = useState('');
   const [slotErrors, setSlotErrors] = useState({});
@@ -174,22 +183,22 @@ export default function AppointmentBookingScreen({ navigation, route }) {
       const res = await api.get(`/appointments/availability?date=${formattedDate}`);
       if (res.success && res.data) {
         setBookedSlotsCounts(res.data.counts || {});
-        setAvailableSlots(res.data.availableSlots || []);
+        if (res.data.availableSlots && res.data.availableSlots.length > 0) {
+          setAvailableSlots(res.data.availableSlots);
+        }
       } else {
         setBookedSlotsCounts({});
-        setAvailableSlots([]);
       }
     } catch (err) {
       console.warn('Failed to load booked slots counts:', err.message);
       setBookedSlotsCounts({});
-      setAvailableSlots([]);
     }
   };
 
   useEffect(() => {
     fetchSettings();
-    const today = new Date();
-    loadBookedSlots(today);
+    const initialD = getInitialBookingDate();
+    loadBookedSlots(initialD);
     loadData(true);
   }, []);
 
@@ -222,9 +231,80 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     }
   }, [rescheduleDate]);
 
+  const DEFAULT_SLOTS = [
+    "10:00 AM - 11:00 AM",
+    "11:00 AM - 12:00 PM",
+    "12:00 PM - 01:00 PM",
+    "01:00 PM - 02:00 PM",
+    "02:00 PM - 03:00 PM",
+    "03:00 PM - 04:00 PM",
+    "04:00 PM - 05:00 PM",
+    "05:00 PM - 06:00 PM",
+    "06:00 PM - 07:00 PM",
+    "07:00 PM - 08:00 PM"
+  ];
+
+  const formatSlotDisplay = (slotStr) => {
+    if (!slotStr) return '';
+    if (slotStr.includes('AM') || slotStr.includes('PM')) return slotStr;
+    try {
+      const parts = slotStr.split(' - ');
+      if (parts.length !== 2) return slotStr;
+      const formatPart = (timeStr) => {
+        let [h, m] = timeStr.trim().split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12;
+        return `${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`;
+      };
+      return `${formatPart(parts[0])} - ${formatPart(parts[1])}`;
+    } catch (e) {
+      return slotStr;
+    }
+  };
+
   const getFilteredAvailableSlots = (dateObj) => {
-    if (!dateObj) return availableSlots;
-    return availableSlots;
+    const targetDate = dateObj || selectedDate;
+    const rawPool = availableSlots && availableSlots.length > 0 ? availableSlots : DEFAULT_SLOTS;
+    const pool = rawPool.map(formatSlotDisplay);
+
+    if (!targetDate) return pool;
+
+    const isToday = targetDate.toDateString() === new Date().toDateString();
+    const now = new Date();
+
+    const activeSlots = pool.filter(s => {
+      const count = bookedSlotsCounts[s] || 0;
+      if (count >= maxBookingsPerSlot) return false;
+
+      if (isToday) {
+        try {
+          const startPart = s.split(' - ')[0].trim();
+          let hours = 0;
+          let minutes = 0;
+          if (startPart.includes('AM') || startPart.includes('PM')) {
+            const [time, modifier] = startPart.split(' ');
+            [hours, minutes] = time.split(':').map(Number);
+            if (modifier === 'PM' && hours !== 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+          } else {
+            [hours, minutes] = startPart.split(':').map(Number);
+          }
+          
+          const slotStartTime = new Date(now);
+          slotStartTime.setHours(hours, minutes, 0, 0);
+          
+          if (now >= slotStartTime) {
+            return false;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      return true;
+    });
+
+    return activeSlots.length > 0 ? activeSlots : pool;
   };
 
   const loadData = async (reset = false) => {
@@ -1101,29 +1181,41 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                   )}
 
                   <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>PREFERRED TIME SLOT</Text>
-                  <View style={styles.slotsRowMinimal}>
-                    {getFilteredAvailableSlots(selectedDate).map(s => (
-                      <TouchableOpacity 
-                        key={s} 
-                        style={[
-                          styles.slotChipMinimal, 
-                          { borderColor: theme.border, backgroundColor: theme.bg.main }, 
-                          timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
-                        ]} 
-                        onPress={() => setTimeSlot(s)}
-                        activeOpacity={0.8}
-                      >
-                        {timeSlot === s && <CheckCircle2 size={12} color={theme.brand[900]} style={{ marginRight: 4 }} />}
-                        <Text style={[
-                          styles.slotChipTextMinimal, 
-                          { color: theme.text.secondary, fontFamily: fonts.medium }, 
-                          timeSlot === s && { color: theme.brand[900], fontFamily: fonts.bold }
-                        ]}>
-                          {s.split(' ')[0]}
+                  {(() => {
+                    const slots = getFilteredAvailableSlots(selectedDate);
+                    if (slots.length === 0) {
+                      return (
+                        <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: theme.text.secondary, marginVertical: 6 }}>
+                          All slots for this date have passed. Please choose tomorrow or another date above.
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                      );
+                    }
+                    return (
+                      <View style={styles.slotsRowMinimal}>
+                        {slots.map(s => (
+                          <TouchableOpacity 
+                            key={s} 
+                            style={[
+                              styles.slotChipMinimal, 
+                              { borderColor: theme.border, backgroundColor: theme.bg.main }, 
+                              timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                            ]} 
+                            onPress={() => setTimeSlot(s)}
+                            activeOpacity={0.8}
+                          >
+                            {timeSlot === s && <CheckCircle2 size={12} color={theme.brand[900]} style={{ marginRight: 4 }} />}
+                            <Text style={[
+                              styles.slotChipTextMinimal, 
+                              { color: theme.text.secondary, fontFamily: fonts.medium }, 
+                              timeSlot === s && { color: theme.brand[900], fontFamily: fonts.bold }
+                            ]}>
+                              {s}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    );
+                  })()}
                   {errors.timeSlot && <Text style={styles.errorTextMinimal}>{errors.timeSlot}</Text>}
 
                   {!productImage && (
@@ -1151,6 +1243,12 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                     value={address} 
                     onChangeText={setAddress} 
                   />
+                  {user?.address && address !== user.address && (
+                    <TouchableOpacity onPress={() => setAddress(user.address)} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                      <MapPin size={12} color={theme.brand[700]} style={{ marginRight: 4 }} />
+                      <Text style={{ fontFamily: fonts.semiBold, fontSize: 11, color: theme.brand[700] }}>Use profile address: {user.address}</Text>
+                    </TouchableOpacity>
+                  )}
                   {errors.address && <Text style={styles.errorTextMinimal}>{errors.address}</Text>}
                 </>
               )}
@@ -1239,7 +1337,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                           { color: theme.text.secondary, fontFamily: fonts.medium }, 
                           rescheduleTimeSlot === s && { color: theme.brand[900], fontFamily: fonts.bold }
                         ]}>
-                          {s.split(' ')[0]}
+                          {s}
                         </Text>
                       </TouchableOpacity>
                     ))}

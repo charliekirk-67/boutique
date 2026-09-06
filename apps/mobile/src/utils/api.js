@@ -14,63 +14,31 @@ const getApiUrl = () => {
     return prodUrl;
   }
 
-  // ── Connection Strategy (Development) ────────────────────────────────────────
-  // BEST: Use 'adb reverse tcp:5000 tcp:5000' (USB physical device) → set to 'localhost'
-  // ALT:  Use your machine's LAN IP (Wi-Fi/Ethernet) for physical device on same network.
-  //
-  // Current active LAN IP: 192.168.29.63 (Wi-Fi)
-  // adb reverse IS ACTIVE → using localhost (most reliable for USB).
-  const PRIMARY_IP = 'localhost'; // ← adb reverse active
-  const SECONDARY_IP = '192.168.29.63'; // LAN IP fallback if adb reverse fails
-
-  // 1. If adb reverse is active (PRIMARY_IP = 'localhost') — most reliable for USB devices.
-  if (PRIMARY_IP === 'localhost') {
-    const url = 'http://localhost:5000/api/v1';
-    console.log('[API] Using adb reverse tunnel (localhost):', url);
-    return url;
+  // 1. Web Platform (Browser)
+  if (Platform.OS === 'web') {
+    return 'http://localhost:5000/api/v1';
   }
 
-  // 2. Try to get the host machine's IP from Expo Constants.
-  // This auto-detects the IP for physical devices / emulators on the same Wi-Fi network.
-  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.hostUri;
-
+  // 2. Auto-detect host machine IP from Expo Constants (Works automatically for Wi-Fi & LAN)
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
     const localIp = hostUri.split(':')[0];
     if (localIp && localIp !== 'localhost' && localIp !== '127.0.0.1') {
       const url = `http://${localIp}:5000/api/v1`;
-      console.log('[API] Auto-detected Expo hostUri IP:', url);
+      console.log('[API] Auto-detected Expo host IP:', url);
       return url;
     }
   }
 
-  // 3. Android EMULATOR loopback — 10.0.2.2 maps to host's 127.0.0.1 inside the emulator.
-  // NOTE: Only use this for emulators, NOT physical devices (10.0.2.2 won't work on real devices).
-  // To detect emulator: device model is typically 'sdk_gphone' or similar.
-  const isEmulator = Constants.expoConfig?.hostUri?.includes('10.0.2.2') ||
-    Constants.manifest?.hostUri?.includes('10.0.2.2');
-  if (Platform.OS === 'android' && isEmulator) {
-    const url = 'http://10.0.2.2:5000/api/v1';
-    console.log('[API] Android emulator: using 10.0.2.2 loopback:', url);
-    return url;
+  // 3. Android Emulator fallback
+  if (Platform.OS === 'android' && (Constants.expoConfig?.hostUri?.includes('10.0.2.2') || Constants.manifest?.hostUri?.includes('10.0.2.2'))) {
+    return 'http://10.0.2.2:5000/api/v1';
   }
 
-  // 4. Fallback to the primary manually provided IPv4 address
-  if (PRIMARY_IP) {
-    const url = `http://${PRIMARY_IP}:5000/api/v1`;
-    console.log('[API] Using primary manual IPv4 fallback:', url);
-    return url;
-  }
-
-  // 5. Fallback to secondary
-  if (SECONDARY_IP) {
-    const url = `http://${SECONDARY_IP}:5000/api/v1`;
-    console.log('[API] Using secondary manual IPv4 fallback:', url);
-    return url;
-  }
-
-  const url = 'http://localhost:5000/api/v1';
-  console.log('[API] Using default localhost:', url);
-  return url;
+  // 4. Fallback to active laptop Wi-Fi IP
+  const defaultWifiIp = '192.168.0.102';
+  console.log('[API] Using Wi-Fi LAN IP fallback:', `http://${defaultWifiIp}:5000/api/v1`);
+  return `http://${defaultWifiIp}:5000/api/v1`;
 };
 
 

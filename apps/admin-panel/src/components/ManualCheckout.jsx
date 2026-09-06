@@ -485,9 +485,20 @@ export default function ManualCheckout() {
 
     try {
       setIsSubmitting(true);
+
+      const rawSearch = customerSearchTerm.trim();
+      const isEmailInput = rawSearch.includes('@');
+      const isPhoneInput = !isEmailInput && /^\+?[\d\s-]{10,14}$/.test(rawSearch);
+      
+      const customerEmail = selectedCustomer?.email || (isEmailInput ? rawSearch : undefined);
+      const customerPhone = selectedCustomer?.phoneNumber || (isPhoneInput ? rawSearch : undefined);
+      const customerName = selectedCustomer ? selectedCustomer.fullName : (rawSearch || 'Walk-In Customer');
+
       const order = await api.checkoutOfflineSale({
         userId: selectedCustomer ? selectedCustomer.id : undefined,
-        customerName: selectedCustomer ? selectedCustomer.fullName : customerSearchTerm.trim(),
+        customerName,
+        customerEmail,
+        customerPhone,
         items: cart.map(i => ({ 
           productId: i.productId, 
           quantity: i.quantity, 
@@ -1231,7 +1242,45 @@ export default function ManualCheckout() {
 
             <div className="mt-6 border-t border-slate-100 pt-4 flex gap-3">
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  const printContent = document.getElementById('invoice-print-area');
+                  if (!printContent) {
+                    window.print();
+                    return;
+                  }
+                  const printWindow = window.open('', '_blank', 'width=850,height=950');
+                  if (printWindow) {
+                    printWindow.document.write(`
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <title>Invoice - ${completedOrder?.invoiceNumber || 'MARCOS'}</title>
+                          <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+                          <style>
+                            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 32px; color: #1e293b; background: white; }
+                            @page { margin: 12mm; size: auto; }
+                            table { width: 100%; border-collapse: collapse; }
+                          </style>
+                        </head>
+                        <body>
+                          ${printContent.innerHTML}
+                          <script>
+                            window.onload = function() {
+                              setTimeout(function() {
+                                window.focus();
+                                window.print();
+                                window.onafterprint = function() { window.close(); };
+                              }, 300);
+                            };
+                          </script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  } else {
+                    window.print();
+                  }
+                }}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 font-bold text-xs"
               >
                 <Printer className="w-4 h-4" />

@@ -14,6 +14,8 @@ export const invoiceCreateSchema = z.object({
   body: z.object({
     userId: z.string().uuid().optional(), // optional for guest checkout
     customerName: z.string().optional(), // optional guest name
+    customerEmail: z.string().email().optional(),
+    customerPhone: z.string().optional(),
     items: z.array(z.object({
       productId: z.string().uuid(),
       quantity: z.coerce.number().int().min(1),
@@ -43,50 +45,58 @@ export class BillingController {
    * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
    */
   static async createInvoice(req: Request, res: Response, next: NextFunction) {
-    const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
+    const { userId, customerName, customerEmail, customerPhone, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
 
     try {
       // 1. Process inventory adjust and Order insertion inside a database transaction
       const order = await prisma.$transaction(async (tx: any) => {
         let subtotal = 0;
 
+        let finalUserId = userId;
+        if (!finalUserId && (customerEmail || customerPhone)) {
+          const userMatch = await tx.user.findFirst({
+            where: {
+              OR: [
+                customerEmail ? { email: customerEmail.toLowerCase() } : undefined,
+                customerPhone ? { phoneNumber: customerPhone } : undefined,
+              ].filter(Boolean) as any,
+            },
+          });
+          if (userMatch) {
+            finalUserId = userMatch.id;
+          }
+        }
+
+        // Pre-fetch all products to avoid N+1 reads
+        const productIds = items.map((i: any) => i.productId);
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+        });
+        const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]));
+
         for (const item of items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          const product = productMap.get(item.productId);
           if (!product) {
             throw new Error(`Product ${item.productId} not found`);
           }
+          if (product.inventoryQty < item.quantity) {
+            throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
+          }
+        }
 
-          // Atomic conditional update to prevent concurrent double-booking race conditions
-          const updateResult = await tx.product.updateMany({
-            where: {
-              id: item.productId,
-              inventoryQty: { gte: item.quantity },
-            },
+        // Deduct inventory and update stock statuses
+        for (const item of items) {
+          const product = productMap.get(item.productId);
+          const newInventoryQty = product.inventoryQty - item.quantity;
+          const newStockStatus = computeStockStatus(newInventoryQty);
+          await tx.product.update({
+            where: { id: item.productId },
             data: {
               inventoryQty: { decrement: item.quantity },
               salesCount: { increment: item.quantity },
+              stockStatus: newStockStatus,
             },
           });
-
-          if (updateResult.count === 0) {
-            throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
-          }
-
-          // Fetch the updated inventory value to set stock status
-          const updatedProduct = await tx.product.findUnique({
-            where: { id: item.productId },
-            select: { inventoryQty: true },
-          });
-
-          if (updatedProduct) {
-            await tx.product.update({
-              where: { id: item.productId },
-              data: {
-                stockStatus: computeStockStatus(updatedProduct.inventoryQty),
-              },
-            });
-          }
-
           subtotal += Number(item.price) * item.quantity;
         }
 
@@ -118,10 +128,10 @@ export class BillingController {
           finalPaymentStatus = 'PARTIAL';
         }
 
-        // Create Order
+        // Create Order with nested orderItems
         const newOrder = await tx.order.create({
           data: {
-            userId,
+            userId: finalUserId,
             status: status || 'PENDING',
             paymentStatus: finalPaymentStatus,
             totalAmount,
@@ -134,35 +144,38 @@ export class BillingController {
             invoiceNumber,
             advancePayment: advancePaymentValue,
             balanceAmount,
-            gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
+            gatewayResponse: {
+              ...(customerName ? { guestCustomerName: customerName } : {}),
+              ...(customerEmail ? { guestCustomerEmail: customerEmail } : {}),
+              ...(customerPhone ? { guestCustomerPhone: customerPhone } : {}),
+            },
             isQuickOrder: isQuickOrder || false,
             quickOrderReason: isQuickOrder ? quickOrderReason : null,
             quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
             quickOrderStatus: isQuickOrder ? 'PENDING' : null,
             measurementProfileIds: measurementProfileIds && measurementProfileIds.length > 0 ? measurementProfileIds : undefined,
             deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+            orderItems: {
+              create: items.map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                price: item.price,
+              })),
+            },
           },
           include: {
-            orderItems: true,
+            orderItems: {
+              include: {
+                product: true,
+              },
+            },
           },
         });
 
-        // Insert Order Items
-        const insertedItems = [];
-        for (const item of items) {
-          const oi = await tx.orderItem.create({
-            data: {
-              orderId: newOrder.id,
-              productId: item.productId,
-              quantity: item.quantity,
-              price: item.price,
-            },
-          });
-          insertedItems.push(oi);
-        }
-        newOrder.orderItems = insertedItems;
-
         return newOrder;
+      }, {
+        maxWait: 10000,
+        timeout: 30000,
       });
 
       // Log ORDER_CREATED
@@ -198,11 +211,11 @@ export class BillingController {
       }
 
       // 2. Queue background PDF compilation & emails
-      await JobsProducer.queueInvoicePdf(order.id);
+      await JobsProducer.queueInvoicePdf(order.id, customerEmail, customerName);
 
       // 3. Queue referral and customer loyalty point adjustments
-      if (userId) {
-        await JobsProducer.queueCreditReferralPoints(order.id, userId);
+      if (order.userId) {
+        await JobsProducer.queueCreditReferralPoints(order.id, order.userId);
       }
 
       // Broadcast WebSocket order:placed event to admins

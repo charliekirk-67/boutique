@@ -29,7 +29,7 @@ function initWorker() {
         logger_js_1.default.info(`Starting job: ${job.name} (ID: ${job.id})`);
         switch (job.name) {
             case 'GENERATE_INVOICE_PDF':
-                await handleGenerateInvoicePdf(job.data.orderId);
+                await handleGenerateInvoicePdf(job.data.orderId, job.data.customerEmail, job.data.customerName);
                 break;
             case 'SEND_NOTIFICATION':
                 await handleSendNotification(job.data);
@@ -107,7 +107,7 @@ function initWorker() {
 /**
  * PDF generator background handler
  */
-async function handleGenerateInvoicePdf(orderId) {
+async function handleGenerateInvoicePdf(orderId, customerEmail, customerName) {
     const order = await db_js_1.default.order.findUnique({
         where: { id: orderId },
         include: {
@@ -120,12 +120,18 @@ async function handleGenerateInvoicePdf(orderId) {
     if (!order) {
         throw new Error(`Order ${orderId} not found`);
     }
-    // Construct customer mock/real info
-    const customer = order.user || {
-        id: '',
-        fullName: 'Offline Guest Customer',
-        email: 'guest@marcosapp.com',
-        phoneNumber: 'N/A',
+    // Resolve customer information from DB relation, parameters, or stored gatewayResponse
+    const rawGuestEmail = order.gatewayResponse?.guestCustomerEmail;
+    const rawGuestName = order.gatewayResponse?.guestCustomerName;
+    const rawGuestPhone = order.gatewayResponse?.guestCustomerPhone;
+    const resolvedEmail = order.user?.email || customerEmail || rawGuestEmail || '';
+    const resolvedName = order.user?.fullName || customerName || rawGuestName || 'Valued Customer';
+    const resolvedPhone = order.user?.phoneNumber || rawGuestPhone || 'N/A';
+    const customer = {
+        id: order.user?.id || '',
+        fullName: resolvedName,
+        email: resolvedEmail || 'guest@marcosapp.com',
+        phoneNumber: resolvedPhone,
     };
     // Compile PDF via PDFKit service
     const pdfBuffer = await pdf_service_js_1.default.generateInvoicePdf(order, customer);
@@ -147,23 +153,25 @@ async function handleGenerateInvoicePdf(orderId) {
             userId: order.userId || null,
             action: 'INVOICE_GENERATED',
             details: {
-                message: `PDF Invoice generated and uploaded to R2 for Order ${order.invoiceNumber}. PDF URL: ${pdfUrl}`,
+                message: `PDF Invoice generated and uploaded for Order ${order.invoiceNumber}. PDF URL: ${pdfUrl}`,
                 orderId: order.id,
                 invoiceId: invoice.id,
                 pdfUrl,
             },
         },
     }).catch((err) => logger_js_1.default.error('Failed to log invoice generation audit:', err));
-    // Trigger notification send job downstream
-    if (customer.email && customer.email !== 'guest@marcosapp.com') {
+    // Trigger notification send job downstream to the customer
+    if (resolvedEmail && resolvedEmail !== 'guest@marcosapp.com') {
         await jobs_producer_js_1.default.queueNotification({
-            userId: customer.id || '',
+            userId: order.userId || '',
+            email: resolvedEmail,
+            phone: resolvedPhone,
             channels: ['EMAIL'],
             templates: {
                 email: {
                     id: 'invoice-template',
                     data: {
-                        customerName: customer.fullName,
+                        customerName: resolvedName,
                         invoiceNumber: order.invoiceNumber,
                         payableAmount: order.payableAmount,
                         invoiceUrl: pdfUrl,
@@ -177,13 +185,13 @@ async function handleGenerateInvoicePdf(orderId) {
  * Notification dispatcher background handler
  */
 async function handleSendNotification(data) {
-    const { userId, channels, templates } = data;
+    const { userId, email, phone, channels, templates } = data;
     let user = null;
     if (userId) {
         user = await db_js_1.default.user.findUnique({ where: { id: userId } });
     }
-    const recipientEmail = user?.email || 'customer@example.com';
-    const recipientPhone = user?.phoneNumber || '+1234567890';
+    const recipientEmail = email || user?.email || 'customer@example.com';
+    const recipientPhone = phone || user?.phoneNumber || '+1234567890';
     for (const channel of channels) {
         if (channel === 'EMAIL' && templates.email) {
             const invoiceUrl = templates.email.data?.invoiceUrl;

@@ -85,7 +85,7 @@ const generateSlots = (startStr, endStr, durationMins) => {
 
 export default function BespokeBookingScreen({ navigation, route }) {
   const { theme, fonts, shadows } = useTheme();
-  const { requireAuth } = useAuth();
+  const { requireAuth, user } = useAuth();
   
   // Params passed from ProductDetails
   const { 
@@ -98,22 +98,31 @@ export default function BespokeBookingScreen({ navigation, route }) {
   const [fittingMode, setFittingMode] = useState('STUDIO');
   const [showModeDropdown, setShowModeDropdown] = useState(false);
 
+  // Initialize date to tomorrow if current time is evening (after 18:00)
+  const getInitialDate = () => {
+    const d = new Date();
+    if (d.getHours() >= 18) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d;
+  };
+
   // Form states
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(getInitialDate());
   const [timeSlot, setTimeSlot] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   // Address states
-  const [customAddress, setCustomAddress] = useState('');
+  const [customAddress, setCustomAddress] = useState(user?.address || '');
   const [savedAddressesList, setSavedAddressesList] = useState([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
 
   // Availability & Slots states
   const [availableSlots, setAvailableSlots] = useState(AVAILABLE_SLOTS);
   const [bookedSlotsCounts, setBookedSlotsCounts] = useState({});
-  const [maxBookingsPerSlot, setMaxBookingsPerSlot] = useState(3);
+  const [maxBookingsPerSlot, setMaxBookingsPerSlot] = useState(5);
 
   // Load Saved Addresses
   const loadAddresses = async () => {
@@ -121,6 +130,8 @@ export default function BespokeBookingScreen({ navigation, route }) {
       const active = await AsyncStorage.getItem('active_delivery_address');
       if (active) {
         setCustomAddress(active);
+      } else if (user?.address) {
+        setCustomAddress(user.address);
       }
       const savedListJSON = await AsyncStorage.getItem('saved_delivery_addresses');
       if (savedListJSON) {
@@ -141,11 +152,13 @@ export default function BespokeBookingScreen({ navigation, route }) {
         }
         
         const start = res.data.businessHoursStart || '09:00';
-        const end = res.data.businessHoursEnd || '18:00';
+        const end = res.data.businessHoursEnd || '20:00';
         const duration = Number(res.data.bookingSlotDurationMinutes) || 60;
         
         const generated = generateSlots(start, end, duration);
-        setAvailableSlots(generated);
+        if (generated && generated.length > 0) {
+          setAvailableSlots(generated);
+        }
       }
     } catch (err) {
       console.error('Error loading settings from /system/settings/public:', err);
@@ -157,10 +170,14 @@ export default function BespokeBookingScreen({ navigation, route }) {
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const day = String(dateObj.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
+      const formattedDate = `${year}-${month}-${day}T12:00:00.000Z`;
       const res = await api.get(`/appointments/availability?date=${formattedDate}`);
       if (res.success && res.data) {
-        setBookedSlotsCounts(res.data);
+        const countsMap = res.data.counts || res.data;
+        setBookedSlotsCounts(typeof countsMap === 'object' ? countsMap : {});
+        if (Array.isArray(res.data.availableSlots) && res.data.availableSlots.length > 0) {
+          setAvailableSlots(res.data.availableSlots);
+        }
       } else {
         setBookedSlotsCounts({});
       }
@@ -173,7 +190,7 @@ export default function BespokeBookingScreen({ navigation, route }) {
   useEffect(() => {
     loadAddresses();
     fetchSettings();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedDate && fittingMode === 'STUDIO') {
@@ -215,27 +232,50 @@ export default function BespokeBookingScreen({ navigation, route }) {
     setCurrentCalendarMonth(next);
   };
 
+  const formatSlotDisplay = (slotStr) => {
+    if (!slotStr) return '';
+    if (slotStr.includes('AM') || slotStr.includes('PM')) return slotStr;
+    try {
+      const parts = slotStr.split(' - ');
+      if (parts.length !== 2) return slotStr;
+      const formatPart = (timeStr) => {
+        let [h, m] = timeStr.trim().split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12;
+        return `${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`;
+      };
+      return `${formatPart(parts[0])} - ${formatPart(parts[1])}`;
+    } catch (e) {
+      return slotStr;
+    }
+  };
+
   const getFilteredAvailableSlots = () => {
-    if (!selectedDate) return availableSlots;
+    const rawPool = availableSlots && availableSlots.length > 0 ? availableSlots : AVAILABLE_SLOTS;
+    const pool = rawPool.map(formatSlotDisplay);
+
+    if (!selectedDate) return pool;
     
     const isToday = selectedDate.toDateString() === new Date().toDateString();
     const now = new Date();
 
-    return availableSlots.filter(s => {
+    const activeSlots = pool.filter(s => {
       const count = bookedSlotsCounts[s] || 0;
       if (count >= maxBookingsPerSlot) return false;
 
       if (isToday) {
         try {
-          const startPart = s.split(' - ')[0];
-          const [time, modifier] = startPart.split(' ');
-          let [hours, minutes] = time.split(':').map(Number);
-          
-          if (modifier === 'PM' && hours !== 12) {
-            hours += 12;
-          }
-          if (modifier === 'AM' && hours === 12) {
-            hours = 0;
+          const startPart = s.split(' - ')[0].trim();
+          let hours = 0;
+          let minutes = 0;
+          if (startPart.includes('AM') || startPart.includes('PM')) {
+            const [time, modifier] = startPart.split(' ');
+            [hours, minutes] = time.split(':').map(Number);
+            if (modifier === 'PM' && hours !== 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+          } else {
+            [hours, minutes] = startPart.split(':').map(Number);
           }
           
           const slotStartTime = new Date(now);
@@ -250,13 +290,16 @@ export default function BespokeBookingScreen({ navigation, route }) {
       }
       return true;
     });
+
+    // If today is selected but all slots have elapsed, provide the standard slots so user can still select
+    return activeSlots.length > 0 ? activeSlots : pool;
   };
 
   const validateForm = () => {
     const tempErrors = {};
     if (!selectedDate) tempErrors.date = 'Please select a date';
-    if (fittingMode === 'STUDIO' && !timeSlot) tempErrors.timeSlot = 'Please select a time slot';
-    if (fittingMode === 'HOME' && !customAddress) tempErrors.address = 'Please specify a fitting address';
+    if (fittingMode === 'STUDIO' && !timeSlot) tempErrors.timeSlot = 'Please select an available time slot';
+    if (fittingMode === 'HOME' && !customAddress.trim()) tempErrors.address = 'Please enter your fitting address for the home visit';
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
   };
@@ -398,28 +441,52 @@ export default function BespokeBookingScreen({ navigation, route }) {
         </View>
 
         {/* Measurement & Visit Location Selector */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Measurement & Visit Location
-          </Text>
-          <TouchableOpacity 
-            style={[styles.addressSelector, { backgroundColor: theme.bg.card, borderColor: theme.border }]} 
-            onPress={() => setShowAddressModal(true)}
-            activeOpacity={0.8}
-          >
-            <MapPin size={18} color={theme.brand[500]} style={{ marginRight: 10 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, color: theme.text.primary }}>
-                {customAddress ? 'Tailor Visit Location' : 'Choose Address'}
-              </Text>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.text.secondary, marginTop: 2 }} numberOfLines={1}>
-                {customAddress || 'Select home address for measurement session'}
-              </Text>
+        {fittingMode === 'STUDIO' ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+              Fitting Studio Location
+            </Text>
+            <View style={[styles.addressSelector, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+              <MapPin size={18} color={theme.brand[500]} style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, color: theme.text.primary }}>
+                  MARCOS Flagship Studio (In-Store)
+                </Text>
+                <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.text.secondary, marginTop: 2 }}>
+                  12, Khader Nawaz Khan Rd, Nungambakkam, Chennai, Tamil Nadu 600006
+                </Text>
+              </View>
             </View>
-            <ChevronDown size={16} color={theme.text.muted} />
-          </TouchableOpacity>
-          {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
-        </View>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+              Home Visit Address *
+            </Text>
+            <TextInput 
+              style={[styles.addressInput, { backgroundColor: theme.bg.card, borderColor: theme.border, color: theme.text.primary, fontFamily: fonts.regular }]}
+              placeholder="Enter complete door no, building name, street, area, pincode..."
+              placeholderTextColor={theme.text.muted}
+              multiline
+              numberOfLines={2}
+              value={customAddress}
+              onChangeText={setCustomAddress}
+            />
+            {user?.address && customAddress !== user.address && (
+              <TouchableOpacity 
+                onPress={() => setCustomAddress(user.address)} 
+                style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}
+                activeOpacity={0.7}
+              >
+                <MapPin size={13} color={theme.brand[500]} style={{ marginRight: 4 }} />
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: 11, color: theme.brand[500] }}>
+                  Use profile address: {user.address}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
+          </View>
+        )}
 
         {/* Date Selection Section (Custom Calendar) */}
         <View style={styles.section}>
@@ -495,36 +562,51 @@ export default function BespokeBookingScreen({ navigation, route }) {
         </View>
 
         {/* Time Slots Section (Only for STUDIO mode) */}
-        {fittingMode === 'STUDIO' && selectedDate && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              Available In-Store Slots
-            </Text>
-            <View style={styles.slotsGrid}>
-              {getFilteredAvailableSlots().map((slot, idx) => {
-                const isSelected = timeSlot === slot;
-                return (
-                  <TouchableOpacity 
-                    key={idx}
-                    style={[
-                      styles.slotBtn, 
-                      { backgroundColor: theme.bg.card, borderColor: theme.border },
-                      isSelected && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
-                    ]}
-                    onPress={() => setTimeSlot(slot)}
-                    activeOpacity={0.8}
-                  >
-                    <Clock size={12} color={isSelected ? '#3D2E3D' : theme.text.secondary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.slotText, { color: theme.text.primary, fontFamily: fonts.semiBold }, isSelected && { color: '#3D2E3D' }]}>
-                      {slot.split(' ')[0]} {slot.split(' ')[1]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+        {fittingMode === 'STUDIO' && selectedDate && (() => {
+          const currentSlots = getFilteredAvailableSlots();
+          return (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                Available In-Store Slots
+              </Text>
+              {currentSlots.length > 0 ? (
+                <View style={styles.slotsGrid}>
+                  {currentSlots.map((slot, idx) => {
+                    const isSelected = timeSlot === slot;
+                    return (
+                      <TouchableOpacity 
+                        key={idx}
+                        style={[
+                          styles.slotBtn, 
+                          { backgroundColor: theme.bg.card, borderColor: theme.border },
+                          isSelected && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                        ]}
+                        onPress={() => setTimeSlot(slot)}
+                        activeOpacity={0.8}
+                      >
+                        <Clock size={12} color={isSelected ? '#3D2E3D' : theme.text.secondary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.slotText, { color: theme.text.primary, fontFamily: fonts.semiBold }, isSelected && { color: '#3D2E3D' }]}>
+                          {slot}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={[styles.emptySlotsCard, { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }]}>
+                  <Clock size={18} color={theme.brand[600]} style={{ marginBottom: 6 }} />
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: '#3D2E3D', textAlign: 'center' }}>
+                    All slots for {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} have passed
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: '#5C4A5C', textAlign: 'center', marginTop: 4 }}>
+                    Please select tomorrow or a future date on the calendar above.
+                  </Text>
+                </View>
+              )}
+              {errors.timeSlot && <Text style={styles.errorText}>{errors.timeSlot}</Text>}
             </View>
-            {errors.timeSlot && <Text style={styles.errorText}>{errors.timeSlot}</Text>}
-          </View>
-        )}
+          );
+        })()}
 
         {/* Additional Notes */}
         <View style={styles.section}>
@@ -864,5 +946,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  addressInput: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 70,
+    textAlignVertical: 'top',
+    fontSize: 13,
+  },
+  emptySlotsCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
 });

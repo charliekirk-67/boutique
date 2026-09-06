@@ -18,6 +18,8 @@ exports.invoiceCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         userId: zod_1.z.string().uuid().optional(), // optional for guest checkout
         customerName: zod_1.z.string().optional(), // optional guest name
+        customerEmail: zod_1.z.string().email().optional(),
+        customerPhone: zod_1.z.string().optional(),
         items: zod_1.z.array(zod_1.z.object({
             productId: zod_1.z.string().uuid(),
             quantity: zod_1.z.coerce.number().int().min(1),
@@ -46,43 +48,53 @@ class BillingController {
      * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
      */
     static async createInvoice(req, res, next) {
-        const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
+        const { userId, customerName, customerEmail, customerPhone, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
         try {
             // 1. Process inventory adjust and Order insertion inside a database transaction
             const order = await db_js_1.default.$transaction(async (tx) => {
                 let subtotal = 0;
+                let finalUserId = userId;
+                if (!finalUserId && (customerEmail || customerPhone)) {
+                    const userMatch = await tx.user.findFirst({
+                        where: {
+                            OR: [
+                                customerEmail ? { email: customerEmail.toLowerCase() } : undefined,
+                                customerPhone ? { phoneNumber: customerPhone } : undefined,
+                            ].filter(Boolean),
+                        },
+                    });
+                    if (userMatch) {
+                        finalUserId = userMatch.id;
+                    }
+                }
+                // Pre-fetch all products to avoid N+1 reads
+                const productIds = items.map((i) => i.productId);
+                const products = await tx.product.findMany({
+                    where: { id: { in: productIds } },
+                });
+                const productMap = new Map(products.map((p) => [p.id, p]));
                 for (const item of items) {
-                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    const product = productMap.get(item.productId);
                     if (!product) {
                         throw new Error(`Product ${item.productId} not found`);
                     }
-                    // Atomic conditional update to prevent concurrent double-booking race conditions
-                    const updateResult = await tx.product.updateMany({
-                        where: {
-                            id: item.productId,
-                            inventoryQty: { gte: item.quantity },
-                        },
+                    if (product.inventoryQty < item.quantity) {
+                        throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
+                    }
+                }
+                // Deduct inventory and update stock statuses
+                for (const item of items) {
+                    const product = productMap.get(item.productId);
+                    const newInventoryQty = product.inventoryQty - item.quantity;
+                    const newStockStatus = (0, product_controller_js_1.computeStockStatus)(newInventoryQty);
+                    await tx.product.update({
+                        where: { id: item.productId },
                         data: {
                             inventoryQty: { decrement: item.quantity },
                             salesCount: { increment: item.quantity },
+                            stockStatus: newStockStatus,
                         },
                     });
-                    if (updateResult.count === 0) {
-                        throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
-                    }
-                    // Fetch the updated inventory value to set stock status
-                    const updatedProduct = await tx.product.findUnique({
-                        where: { id: item.productId },
-                        select: { inventoryQty: true },
-                    });
-                    if (updatedProduct) {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: {
-                                stockStatus: (0, product_controller_js_1.computeStockStatus)(updatedProduct.inventoryQty),
-                            },
-                        });
-                    }
                     subtotal += Number(item.price) * item.quantity;
                 }
                 // Calculations
@@ -113,10 +125,10 @@ class BillingController {
                 else if (finalPaymentStatus === 'PENDING' && advancePaymentValue > 0) {
                     finalPaymentStatus = 'PARTIAL';
                 }
-                // Create Order
+                // Create Order with nested orderItems
                 const newOrder = await tx.order.create({
                     data: {
-                        userId,
+                        userId: finalUserId,
                         status: status || 'PENDING',
                         paymentStatus: finalPaymentStatus,
                         totalAmount,
@@ -129,33 +141,37 @@ class BillingController {
                         invoiceNumber,
                         advancePayment: advancePaymentValue,
                         balanceAmount,
-                        gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
+                        gatewayResponse: {
+                            ...(customerName ? { guestCustomerName: customerName } : {}),
+                            ...(customerEmail ? { guestCustomerEmail: customerEmail } : {}),
+                            ...(customerPhone ? { guestCustomerPhone: customerPhone } : {}),
+                        },
                         isQuickOrder: isQuickOrder || false,
                         quickOrderReason: isQuickOrder ? quickOrderReason : null,
                         quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
                         quickOrderStatus: isQuickOrder ? 'PENDING' : null,
                         measurementProfileIds: measurementProfileIds && measurementProfileIds.length > 0 ? measurementProfileIds : undefined,
                         deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+                        orderItems: {
+                            create: items.map((item) => ({
+                                productId: item.productId,
+                                quantity: item.quantity,
+                                price: item.price,
+                            })),
+                        },
                     },
                     include: {
-                        orderItems: true,
+                        orderItems: {
+                            include: {
+                                product: true,
+                            },
+                        },
                     },
                 });
-                // Insert Order Items
-                const insertedItems = [];
-                for (const item of items) {
-                    const oi = await tx.orderItem.create({
-                        data: {
-                            orderId: newOrder.id,
-                            productId: item.productId,
-                            quantity: item.quantity,
-                            price: item.price,
-                        },
-                    });
-                    insertedItems.push(oi);
-                }
-                newOrder.orderItems = insertedItems;
                 return newOrder;
+            }, {
+                maxWait: 10000,
+                timeout: 30000,
             });
             // Log ORDER_CREATED
             await (0, audit_js_1.createAuditLog)({
@@ -188,10 +204,10 @@ class BillingController {
                 });
             }
             // 2. Queue background PDF compilation & emails
-            await jobs_producer_js_1.default.queueInvoicePdf(order.id);
+            await jobs_producer_js_1.default.queueInvoicePdf(order.id, customerEmail, customerName);
             // 3. Queue referral and customer loyalty point adjustments
-            if (userId) {
-                await jobs_producer_js_1.default.queueCreditReferralPoints(order.id, userId);
+            if (order.userId) {
+                await jobs_producer_js_1.default.queueCreditReferralPoints(order.id, order.userId);
             }
             // Broadcast WebSocket order:placed event to admins
             const io = (0, socket_handler_js_1.getIO)();

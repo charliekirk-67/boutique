@@ -48,7 +48,7 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState('');
-  const [gender, setGender] = useState('');
+  const [gender, setGender] = useState('OTHER');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -141,7 +141,7 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
       return;
     }
     if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+      setErrorMsg('Password must be at least 6 characters long.');
       return;
     }
 
@@ -176,7 +176,11 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.message || 'Registration failed. Phone or Email might already be in use.');
+      let msg = err.response?.data?.message || err.message || 'Registration failed.';
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        msg = err.response.data.errors.map(e => e.message).join(' ');
+      }
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -381,7 +385,7 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
         <View style={[styles.inputWrapper, { borderColor: theme.border }]}>
           <TextInput
             style={[styles.input, { fontFamily: fonts.regular }]}
-            placeholder="••••••••••••"
+            placeholder="At least 10 chars (e.g. MarcosPass1)"
             placeholderTextColor={theme.text.muted}
             secureTextEntry={!showPassword}
             value={password}
@@ -394,6 +398,9 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
             {showPassword ? <EyeOff size={20} color="#64748b" /> : <Eye size={20} color="#64748b" />}
           </TouchableOpacity>
         </View>
+        <Text style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontFamily: fonts.regular }}>
+          Must be at least 10 characters with 1 number & 1 uppercase letter
+        </Text>
       </View>
 
       {/* Confirm Password */}

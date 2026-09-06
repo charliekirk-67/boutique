@@ -2,7 +2,7 @@
 // API Configuration
 const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5000/api/v1'
-  : 'https://marcos-xxza.onrender.com/api/v1';
+  : (import.meta.env.VITE_API_URL || 'https://marcos-xxza.onrender.com/api/v1');
 
 class APIClient {
   constructor() {
@@ -891,6 +891,8 @@ class APIClient {
       body: JSON.stringify({
         userId: sale.userId || undefined,
         customerName: sale.customerName,
+        customerEmail: sale.customerEmail || undefined,
+        customerPhone: sale.customerPhone || undefined,
         items: invoiceItems,
         discountAmount,
         paymentMethod: sale.paymentMethod ? sale.paymentMethod.toUpperCase() : 'CASH',

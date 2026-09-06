@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Search,
   Eye,
@@ -331,6 +331,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [deliveryStageQuickFilter, setDeliveryStageQuickFilter] = useState('ALL'); // 'ALL' | 'ORDERS_RECEIVED' | 'TO_BE_DELIVERED' | 'DELIVERED'
   const [apptStatusFilter, setApptStatusFilter] = useState('ALL');
   const [visitStatusFilter, setVisitStatusFilter] = useState('ALL');
   
@@ -985,6 +986,9 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
       const statusFilterNav = sessionStorage.getItem('admin_order_status_filter');
       if (statusFilterNav) {
         setStatusFilter(statusFilterNav);
+        if (statusFilterNav === 'DELIVERED') {
+          setDeliveryStageQuickFilter('DELIVERED');
+        }
         sessionStorage.removeItem('admin_order_status_filter');
       }
 
@@ -999,6 +1003,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
         setDateFrom(delivPromisedDate);
         setDateTo(delivPromisedDate);
         setDateFilterType('DELIVERY_DATE');
+        setDeliveryStageQuickFilter('TO_BE_DELIVERED');
         setShowAdvancedFilters(true);
         sessionStorage.removeItem('admin_order_delivery_promised_date');
       }
@@ -1008,6 +1013,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
         setDateFrom(orderDateNav);
         setDateTo(orderDateNav);
         setDateFilterType('ORDER_DATE');
+        setDeliveryStageQuickFilter('ORDERS_RECEIVED');
         setShowAdvancedFilters(true);
         sessionStorage.removeItem('admin_order_date_filter');
       }
@@ -1445,10 +1451,11 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   const handleAssignStaff = async (e) => {
     e.preventDefault();
-    if (!activeVisitId || !selectedStaffId) return;
+    const staffIdToAssign = selectedStaffId || (staffList.length > 0 ? staffList[0].id : null);
+    if (!activeVisitId || !staffIdToAssign) return;
 
     try {
-      await api.assignStaffToVisit(activeVisitId, selectedStaffId);
+      await api.assignStaffToVisit(activeVisitId, staffIdToAssign);
       setActiveVisitId(null);
       loadOrders();
     } catch (err) {
@@ -1488,15 +1495,20 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     }
   };
 
-  const handleUpdateStatus = async (id, status) => {
+  const handleUpdateStatus = async (id, status, e) => {
+    if (e) e.stopPropagation();
     try {
-      await api.updateOrderStatus(id, status);
-      loadOrders();
+      // Optimistic update to immediately reflect in UI
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
       if (selectedOrder && selectedOrder.id === id) {
         setSelectedOrder(prev => ({ ...prev, status }));
       }
+      await api.updateOrderStatus(id, status);
+      await loadOrders(true);
     } catch (err) {
+      console.error('Failed to update status:', err);
       alert(err.message || 'Status update failed.');
+      loadOrders(true);
     }
   };
 
@@ -1564,6 +1576,43 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     setPendingStatusChange(null);
   };
 
+  const todayISOStr = new Date().toISOString().substring(0, 10);
+  const activeDateScope = dateFrom || todayISOStr;
+  const scopeDayStart = new Date(activeDateScope + 'T00:00:00.000Z').getTime();
+  const scopeDayEnd = scopeDayStart + 86400000;
+
+  const sameDayCounts = useMemo(() => {
+    let ordersReceived = 0;
+    let toBeDelivered = 0;
+    let delivered = 0;
+
+    orders.forEach(o => {
+      if (o.isQuickOrder) return;
+      const createdTime = new Date(o.createdAt).getTime();
+      const inCreatedScope = createdTime >= scopeDayStart && createdTime < scopeDayEnd;
+      if (inCreatedScope && o.status !== 'CANCELLED') {
+        ordersReceived++;
+      }
+
+      if (o.deliveryDate) {
+        const delivTime = new Date(o.deliveryDate).getTime();
+        const inDelivScope = delivTime >= scopeDayStart && delivTime < scopeDayEnd;
+        if (inDelivScope) {
+          if (['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(o.status)) {
+            toBeDelivered++;
+          }
+          if (o.status === 'DELIVERED') {
+            delivered++;
+          }
+        }
+      } else if (o.status === 'DELIVERED' && inCreatedScope) {
+        delivered++;
+      }
+    });
+
+    return { ordersReceived, toBeDelivered, delivered, total: orders.filter(o => !o.isQuickOrder).length };
+  }, [orders, scopeDayStart, scopeDayEnd]);
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch =
       (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1571,13 +1620,33 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter || 
       (statusFilter === 'PROCEEDED' && ['PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status));
     
+    // Same-day detailed stage quick filter
+    if (deliveryStageQuickFilter === 'ORDERS_RECEIVED') {
+      const orderCreatedTime = new Date(order.createdAt).getTime();
+      const inDay = orderCreatedTime >= scopeDayStart && orderCreatedTime < scopeDayEnd;
+      if (!inDay || order.status === 'CANCELLED') return false;
+    } else if (deliveryStageQuickFilter === 'TO_BE_DELIVERED') {
+      if (!order.deliveryDate) return false;
+      const delivTime = new Date(order.deliveryDate).getTime();
+      const inDay = delivTime >= scopeDayStart && delivTime < scopeDayEnd;
+      const isPendingDelivery = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(order.status);
+      if (!inDay || !isPendingDelivery) return false;
+    } else if (deliveryStageQuickFilter === 'DELIVERED') {
+      if (order.status !== 'DELIVERED') return false;
+      if (dateFrom) {
+        const delivTime = order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.updatedAt || order.createdAt).getTime();
+        const inDay = delivTime >= scopeDayStart && delivTime < scopeDayEnd;
+        if (!inDay) return false;
+      }
+    }
+
     let matchesDateFrom = true;
     let matchesDateTo = true;
-    if (dateFrom) {
+    if (dateFrom && deliveryStageQuickFilter === 'ALL') {
       const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateFrom = d >= new Date(dateFrom).getTime();
     }
-    if (dateTo) {
+    if (dateTo && deliveryStageQuickFilter === 'ALL') {
       const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
     }
@@ -2148,73 +2217,136 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   const renderAdvancedFilters = () => {
     if (!showAdvancedFilters) return null;
+    const todayStr = new Date().toISOString().substring(0, 10);
+    const tomorrowStr = new Date(Date.now() + 86400000).toISOString().substring(0, 10);
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().substring(0, 10);
+    const last7Str = new Date(Date.now() - 7 * 86400000).toISOString().substring(0, 10);
+    const next7Str = new Date(Date.now() + 7 * 86400000).toISOString().substring(0, 10);
+
     return (
-      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-4 items-end animate-slide-in mt-4 w-full">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Filter</label>
-          <select 
-            value={dateFilterType} 
-            onChange={e => setDateFilterType(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 animate-slide-in mt-4 w-full">
+        {/* Quick Date Presets */}
+        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-slate-200/60">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Presets:</span>
+          <button
+            type="button"
+            onClick={() => { setDateFrom(todayStr); setDateTo(todayStr); }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${dateFrom === todayStr && dateTo === todayStr ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
           >
-            <option value="ORDER_DATE">Order Date</option>
-            <option value="DELIVERY_DATE">Delivery Date</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</label>
-          <input 
-            type="date" 
-            value={dateFrom} 
-            onChange={e => setDateFrom(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date</label>
-          <input 
-            type="date" 
-            value={dateTo} 
-            onChange={e => setDateTo(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-          />
-        </div>
-        {(activeSubTab === 'bookings' || activeSubTab === 'quick_orders') && (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Payment Method</label>
-              <select 
-                value={paymentFilter} 
-                onChange={e => setPaymentFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-              >
-                <option value="ALL">All Methods</option>
-                <option value="CARD">Card / Online</option>
-                <option value="UPI">UPI</option>
-                <option value="CASH">Cash</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Order Source</label>
-              <select 
-                value={typeFilter} 
-                onChange={e => setTypeFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-              >
-                <option value="ALL">All Sources</option>
-                <option value="ONLINE">Online App</option>
-                <option value="OFFLINE">Offline Store</option>
-              </select>
-            </div>
-          </>
-        )}
-        <div className="flex items-end">
-          <button 
-            onClick={() => { setDateFrom(''); setDateTo(''); setDateFilterType('ORDER_DATE'); setPaymentFilter('ALL'); setTypeFilter('ALL'); }}
-            className="px-4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-          >
-            Clear Filters
+            Today
           </button>
+          <button
+            type="button"
+            onClick={() => { setDateFrom(tomorrowStr); setDateTo(tomorrowStr); setDateFilterType('DELIVERY_DATE'); }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${dateFrom === tomorrowStr && dateTo === tomorrowStr ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+          >
+            Tomorrow
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDateFrom(yesterdayStr); setDateTo(yesterdayStr); }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${dateFrom === yesterdayStr && dateTo === yesterdayStr ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+          >
+            Yesterday
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDateFrom(todayStr); setDateTo(next7Str); setDateFilterType('DELIVERY_DATE'); }}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            Next 7 Days Deliveries
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDateFrom(last7Str); setDateTo(todayStr); }}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            Past 7 Days
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Basis</label>
+            <select 
+              value={dateFilterType} 
+              onChange={e => setDateFilterType(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+            >
+              <option value="ORDER_DATE">Order Placed Date</option>
+              <option value="DELIVERY_DATE">Promised Delivery Date</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Day Stage Mode</label>
+            <select 
+              value={deliveryStageQuickFilter} 
+              onChange={e => setDeliveryStageQuickFilter(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors font-bold text-slate-700"
+            >
+              <option value="ALL">All Orders on Date</option>
+              <option value="ORDERS_RECEIVED">Orders Received (Created on Date)</option>
+              <option value="TO_BE_DELIVERED">To Be Delivered (Delivery on Date)</option>
+              <option value="DELIVERED">Delivered (Completed)</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</label>
+            <input 
+              type="date" 
+              value={dateFrom} 
+              onChange={e => setDateFrom(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date</label>
+            <input 
+              type="date" 
+              value={dateTo} 
+              onChange={e => setDateTo(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+            />
+          </div>
+          {(activeSubTab === 'bookings' || activeSubTab === 'quick_orders') && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Payment Method</label>
+                <select 
+                  value={paymentFilter} 
+                  onChange={e => setPaymentFilter(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                >
+                  <option value="ALL">All Methods</option>
+                  <option value="CARD">Card / Online</option>
+                  <option value="UPI">UPI</option>
+                  <option value="CASH">Cash</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Order Source</label>
+                <select 
+                  value={typeFilter} 
+                  onChange={e => setTypeFilter(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                >
+                  <option value="ALL">All Sources</option>
+                  <option value="ONLINE">Online App</option>
+                  <option value="OFFLINE">Offline Store</option>
+                </select>
+              </div>
+            </>
+          )}
+          <div className="flex items-end">
+            <button 
+              onClick={() => { setDateFrom(''); setDateTo(''); setDateFilterType('ORDER_DATE'); setPaymentFilter('ALL'); setTypeFilter('ALL'); setDeliveryStageQuickFilter('ALL'); setStatusFilter('ALL'); }}
+              className="px-4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -2426,6 +2558,109 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
         <>
           {/* ── Filter bar ── */}
           <div className="flex flex-col mb-4">
+            {/* Quick Same-Day / Delivery Stage Filter Chips */}
+            <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryStageQuickFilter('ALL');
+                  setStatusFilter('ALL');
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  deliveryStageQuickFilter === 'ALL' && statusFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>All Orders</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-extrabold">{orders.filter(o => !o.isQuickOrder).length}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryStageQuickFilter('ORDERS_RECEIVED');
+                  setStatusFilter('ALL');
+                  if (!dateFrom) {
+                    const today = new Date().toISOString().substring(0, 10);
+                    setDateFrom(today);
+                    setDateTo(today);
+                    setDateFilterType('ORDER_DATE');
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  deliveryStageQuickFilter === 'ORDERS_RECEIVED'
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+                }`}
+              >
+                <span>📥 Orders Received</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold ${deliveryStageQuickFilter === 'ORDERS_RECEIVED' ? 'bg-white/25 text-white' : 'bg-brand-50 text-brand-700'}`}>
+                  {sameDayCounts.ordersReceived}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryStageQuickFilter('TO_BE_DELIVERED');
+                  setStatusFilter('ALL');
+                  if (!dateFrom) {
+                    const today = new Date().toISOString().substring(0, 10);
+                    setDateFrom(today);
+                    setDateTo(today);
+                    setDateFilterType('DELIVERY_DATE');
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  deliveryStageQuickFilter === 'TO_BE_DELIVERED'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200'
+                }`}
+              >
+                <span>🚚 To Be Delivered</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold ${deliveryStageQuickFilter === 'TO_BE_DELIVERED' ? 'bg-white/25 text-white' : 'bg-amber-50 text-amber-800'}`}>
+                  {sameDayCounts.toBeDelivered}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryStageQuickFilter('DELIVERED');
+                  setStatusFilter('ALL');
+                  if (!dateFrom) {
+                    const today = new Date().toISOString().substring(0, 10);
+                    setDateFrom(today);
+                    setDateTo(today);
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  deliveryStageQuickFilter === 'DELIVERED'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                }`}
+              >
+                <span>✅ Delivered</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold ${deliveryStageQuickFilter === 'DELIVERED' ? 'bg-white/25 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {sameDayCounts.delivered}
+                </span>
+              </button>
+
+              {dateFrom && (
+                <div className="ml-auto flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 px-3 py-1 rounded-xl shrink-0 font-medium">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Date: <strong className="text-slate-800">{new Date(dateFrom + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</strong></span>
+                  <button
+                    onClick={() => { setDateFrom(''); setDateTo(''); setDeliveryStageQuickFilter('ALL'); }}
+                    className="ml-1 text-slate-400 hover:text-red-500 font-bold"
+                    title="Clear date filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
               <div className="relative flex-1 max-w-md w-full">
                 <input
@@ -2565,11 +2800,16 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                                 const nextStatus = HAPPY_PATH[currentIdx + 1];
                                 return (
                                   <button
-                                    onClick={() => handleUpdateStatus(order.id, nextStatus)}
-                                    className="p-1.5 border border-slate-200 rounded-lg hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 text-slate-500 transition-colors"
-                                    title={`Move to next level: ${getStatusLabel(nextStatus)}`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      stageStatusChange(order, nextStatus);
+                                    }}
+                                    className="px-2.5 py-1.5 border border-brand-200 bg-brand-50/70 hover:bg-brand-600 hover:text-white hover:border-brand-600 rounded-xl text-[10px] font-extrabold text-brand-700 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                                    title={`Click to advance order stage to ${getStatusLabel(nextStatus)} (opens confirmation)`}
                                   >
-                                    <ArrowRight className="w-4 h-4" />
+                                    <span>→</span>
+                                    <span>{getStatusLabel(nextStatus)}</span>
                                   </button>
                                 );
                               }
@@ -2670,11 +2910,16 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                           const nextStatus = HAPPY_PATH[currentIdx + 1];
                           return (
                             <button
-                              onClick={() => handleUpdateStatus(order.id, nextStatus)}
-                              className="p-2 border border-slate-200 rounded-xl hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 text-slate-500 transition-colors"
-                              title={`Move to next level: ${getStatusLabel(nextStatus)}`}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                stageStatusChange(order, nextStatus);
+                              }}
+                              className="px-2.5 py-1.5 border border-brand-200 bg-brand-50/70 hover:bg-brand-600 hover:text-white hover:border-brand-600 rounded-xl text-[10px] font-extrabold text-brand-700 transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
+                              title={`Click to advance order stage to ${getStatusLabel(nextStatus)} (opens confirmation)`}
                             >
-                              <ArrowRight className="w-4 h-4" />
+                              <span>→</span>
+                              <span>{getStatusLabel(nextStatus)}</span>
                             </button>
                           );
                         }
@@ -4665,20 +4910,27 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
             <form onSubmit={handleAssignStaff} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Select Staff Member</label>
-                <select
-                  value={selectedStaffId}
-                  onChange={e => setSelectedStaffId(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 bg-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-semibold"
-                >
-                  {staffList.map(s => (
-                    <option key={s.id} value={s.id}>{s.fullName} ({s.role})</option>
-                  ))}
-                </select>
+                {staffList.length === 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-medium">
+                    No staff members found. Please add a tailor in <strong>Team & Tailors</strong> first.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedStaffId || (staffList[0] ? staffList[0].id : '')}
+                    onChange={e => setSelectedStaffId(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 bg-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-semibold text-slate-700"
+                  >
+                    {staffList.map(s => (
+                      <option key={s.id} value={s.id}>{s.fullName} ({s.role})</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md transition-all"
+                disabled={staffList.length === 0}
+                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
               >
                 Confirm Allocation
               </button>

@@ -123,6 +123,7 @@ export default function OrderHistoryScreen({ navigation }) {
       setOrders(prev =>
         prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
       );
+      loadOrders(false);
     };
     socket.on('order:status_changed', handler);
     return () => socket.off('order:status_changed', handler);
@@ -135,7 +136,7 @@ export default function OrderHistoryScreen({ navigation }) {
       list = orders.filter(o => o.isQuickOrder);
     } else if (activeTab !== 'ALL') {
       list = orders.filter(o => !o.isQuickOrder);
-      if (activeTab === 'ACTIVE')    list = list.filter(o => ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED'].includes(o.status));
+      if (activeTab === 'ACTIVE')    list = list.filter(o => ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(o.status));
       if (activeTab === 'COMPLETED') list = list.filter(o => o.status === 'DELIVERED');
       if (activeTab === 'CANCELLED') list = list.filter(o => o.status === 'CANCELLED');
     }
