@@ -12,7 +12,7 @@ import BroadcastAlertListener from './src/components/BroadcastAlertListener';
 import AppAlertsOverlay from './src/components/AppAlertsOverlay';
 
 const linking = {
-  prefixes: ['marcos://', 'https://marcos.app', 'https://marcos-xxza.onrender.com'],
+  prefixes: ['marcos://', 'https://marcos.app', 'https://boutique-vyr6.onrender.com'],
   config: {
     screens: {
       MainApp: {
