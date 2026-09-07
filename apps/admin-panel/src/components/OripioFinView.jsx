@@ -24,6 +24,8 @@ import {
 } from 'recharts';
 import api from '../utils/api';
 
+const formatOrderId = (inv) => inv ? String(inv).replace(/^INV-/i, 'ORD-') : (inv || '');
+
 export default function OripioFinView({ setActiveTab }) {
   const [recentOrders, setRecentOrders] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -123,8 +125,9 @@ export default function OripioFinView({ setActiveTab }) {
   };
 
   const filteredOrders = recentOrders.filter(order => {
-    const matchesSearch = order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      formatOrderId(order.invoiceNumber).toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -462,7 +465,7 @@ export default function OripioFinView({ setActiveTab }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[#F0E5F0] text-[10px] font-bold text-[#7A6B7A] uppercase tracking-wider">
-                <th className="py-3 px-4">Invoice ID</th>
+                <th className="py-3 px-4">Order ID</th>
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Payment method</th>
@@ -478,7 +481,7 @@ export default function OripioFinView({ setActiveTab }) {
               ) : (
                 filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-brand-50/20 transition-colors">
-                    <td className="py-4 px-4 font-bold text-[#3D2E3D]">{order.invoiceNumber}</td>
+                    <td className="py-4 px-4 font-bold text-[#3D2E3D]">{formatOrderId(order.invoiceNumber)}</td>
                     <td className="py-4 px-4 text-[#7A6B7A] font-medium">{order.customerName}</td>
                     <td className="py-4 px-4 text-[#7A6B7A]/80 font-medium">
                       {new Date(order.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -515,7 +518,7 @@ export default function OripioFinView({ setActiveTab }) {
             filteredOrders.map((order) => (
               <div key={order.id} className="bg-[#F7F4F9]/30 border border-[#F0E5F0] rounded-2xl p-4 space-y-3 hover:bg-slate-50 transition-colors">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-[#3D2E3D]">{order.invoiceNumber}</span>
+                  <span className="font-bold text-[#3D2E3D]">{formatOrderId(order.invoiceNumber)}</span>
                   <span className={`
                     inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
                     ${order.status === 'PAID' || order.status === 'DELIVERED'

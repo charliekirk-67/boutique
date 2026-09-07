@@ -15,6 +15,7 @@ const isSameDay = (d1, d2) => {
 };
 const fmtDate = (d, opts = {}) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', ...opts });
 const fmtCurrency = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
+const formatOrderId = (inv) => inv ? String(inv).replace(/^INV-/i, 'ORD-') : (inv || '');
 
 // ─── Delivery stages ──────────────────────────────────────────────────────────
 const STAGES = [
@@ -848,7 +849,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                       >
                         <option value="">-- Choose Order --</option>
                         {customerHistoryOrders.map(o => (
-                          <option key={o.id} value={o.id}>{o.invoiceNumber} (₹{o.payableAmount})</option>
+                          <option key={o.id} value={o.id}>{formatOrderId(o.invoiceNumber)} (₹{o.payableAmount})</option>
                         ))}
                       </select>
                       {selectedOrder && (
@@ -864,9 +865,10 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                 </div>
               ) : (
                 <>
-                  {/* Order selector (if multiple) */}
+                  {/* Linked Order Badges */}
                   {linkedOrders.length > 1 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                      <span className="text-xs font-bold text-slate-400 py-1">Linked Orders:</span>
                       {linkedOrders.map(o => (
                         <button key={o.id} onClick={() => {
                           setSelectedOrder(o);
@@ -876,7 +878,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                           setCustomizations(o.customizations || '');
                           setTailorNotes(o.tailorNotes || '');
                         }} className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${selectedOrder?.id === o.id ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
-                          }`}>{o.invoiceNumber || o.id.slice(0, 8).toUpperCase()}</button>
+                          }`}>{formatOrderId(o.invoiceNumber) || o.id.slice(0, 8).toUpperCase()}</button>
                       ))}
                     </div>
                   )}
@@ -885,7 +887,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                     <div className="bg-brand-50 border border-brand-200 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold text-brand-700">Link Order to {isAppt ? 'Appointment' : 'Visit'}</p>
-                        <p className="text-[10px] text-brand-600/80">Currently viewing {selectedOrder.invoiceNumber}. Link this order to exclusively show it here.</p>
+                        <p className="text-[10px] text-brand-600/80">Currently viewing {formatOrderId(selectedOrder.invoiceNumber)}. Link this order to exclusively show it here.</p>
                       </div>
                       <button onClick={() => linkOrder(selectedOrder.id)} disabled={statusUpdating}
                         className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-[#3D2E3D] text-[11px] font-extrabold shadow-sm transition-all whitespace-nowrap disabled:opacity-60 flex items-center gap-1.5">
@@ -900,7 +902,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-xs font-extrabold text-slate-700">{selectedOrder.invoiceNumber}</p>
+                            <p className="text-xs font-extrabold text-slate-700">{formatOrderId(selectedOrder.invoiceNumber)}</p>
                             <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(selectedOrder.createdAt)}</p>
                           </div>
                           <div className="text-right">
@@ -988,7 +990,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
               {selectedOrder ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-600">{selectedOrder.invoiceNumber}</p>
+                    <p className="text-xs font-bold text-slate-600">{formatOrderId(selectedOrder.invoiceNumber)}</p>
                     <p className="text-[10px] text-slate-400">{fmtCurrency(selectedOrder.payableAmount)}</p>
                   </div>
                   <OrderPipeline order={selectedOrder} onAdvance={advanceOrderStage} />
@@ -1779,7 +1781,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
             </div>
             <div>
               <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-0.5">Linked Order Context</p>
-              <h2 className="text-xl font-black text-indigo-900 leading-tight">{filteredOrder.invoiceNumber}</h2>
+              <h2 className="text-xl font-black text-indigo-900 leading-tight">{formatOrderId(filteredOrder.invoiceNumber)}</h2>
             </div>
           </div>
           <div className="flex flex-wrap gap-8">
@@ -1998,7 +2000,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                       <div key={o.id} className="rounded-2xl border border-purple-200 bg-white p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 group">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{o.invoiceNumber}</p>
+                            <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{formatOrderId(o.invoiceNumber)}</p>
                             <p className="text-xs font-bold text-slate-700 mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
                           </div>
                           <Badge status={o.status} small />
@@ -2071,7 +2073,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                               <Badge status={o.status} small />
                             </div>
                             <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
-                              Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                              Order ID: <span className="text-slate-700">{formatOrderId(o.invoiceNumber) || 'N/A'}</span>
                             </div>
                             {o.quickOrderReason && (
                               <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>

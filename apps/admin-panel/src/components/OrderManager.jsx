@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import api from '../utils/api';
 
+const formatOrderId = (inv) => inv ? String(inv).replace(/^INV-/i, 'ORD-') : (inv || '');
+
 const formatBookingDateUTC = (dateString, options = {}) => {
   if (!dateString) return '';
   const dateObj = new Date(dateString);
@@ -1616,7 +1618,8 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   const filteredOrders = orders.filter(order => {
     const matchesSearch =
       (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      (order.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      formatOrderId(order.invoiceNumber).toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter || 
       (statusFilter === 'PROCEEDED' && ['PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status));
     
@@ -1670,7 +1673,8 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     if (!order.isQuickOrder) return false;
     const matchesSearch =
       (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      (order.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      formatOrderId(order.invoiceNumber).toLowerCase().includes(searchTerm.toLowerCase());
     
     let matchesDateFrom = true;
     let matchesDateTo = true;
@@ -2364,7 +2368,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   <XCircle className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-red-800 text-sm">Order Cancelled: {alert.invoiceNumber}</h4>
+                  <h4 className="font-extrabold text-red-800 text-sm">Order Cancelled: {formatOrderId(alert.invoiceNumber)}</h4>
                   <p className="text-xs font-medium text-red-600/80">Customer: {alert.customerName} • Amount: ₹{Number(alert.payableAmount || 0).toLocaleString('en-IN')}</p>
                 </div>
               </div>
@@ -2706,7 +2710,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-6">Invoice No.</th>
+                    <th className="py-3 px-6">Order ID</th>
                     <th className="py-3 px-6">Customer Name</th>
                     <th className="py-3 px-6">Timelines</th>
                     <th className="py-3 px-6">Sale Type</th>
@@ -2725,7 +2729,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                     paginatedOrders.map((order) => (
                       <tr key={order.id} className={`transition-colors ${order.status === 'CANCELLED' ? 'bg-red-50/70 hover:bg-red-50/90 border-l-2 border-l-red-500' : 'hover:bg-slate-50/20'}`}>
                         <td className={`py-4 px-6 font-extrabold ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>
-                          {order.invoiceNumber}
+                          {formatOrderId(order.invoiceNumber)}
                           {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                             <span className="ml-2 flex items-center gap-1.5 inline-flex">
                               <button
@@ -2841,7 +2845,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   )}
                   <div className="flex justify-between items-center relative z-10">
                     <div className="flex items-center gap-2">
-                      <span className={`font-extrabold text-sm ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>{order.invoiceNumber}</span>
+                      <span className={`font-extrabold text-sm ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>{formatOrderId(order.invoiceNumber)}</span>
                       {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                         <div className="flex gap-1.5 items-center">
                           <button
@@ -3301,7 +3305,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-6">Invoice No.</th>
+                    <th className="py-3 px-6">Order ID</th>
                     <th className="py-3 px-6">Customer Name</th>
                     <th className="py-3 px-6">Expected Date</th>
                     <th className="py-3 px-6">Reason</th>
@@ -3317,7 +3321,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   ) : (
                     filteredQuickOrders.map((order) => (
                       <tr key={order.id} className="hover:bg-slate-50/20 transition-colors">
-                        <td className="py-4 px-6 font-extrabold text-slate-800">{order.invoiceNumber}</td>
+                        <td className="py-4 px-6 font-extrabold text-slate-800">{formatOrderId(order.invoiceNumber)}</td>
                         <td className="py-4 px-6 text-slate-600 font-medium">{order.customerName}</td>
                         <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">
                           {order.quickOrderExpectedDate ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
@@ -3784,7 +3788,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   Order Management Console
                 </span>
                 <h3 className="font-black text-slate-800 text-lg tracking-tight mt-1 flex items-center gap-2">
-                  <span>Manage Order {selectedOrder.invoiceNumber}</span>
+                  <span>Manage Order {formatOrderId(selectedOrder.invoiceNumber)}</span>
                   <span className={`text-xs px-2.5 py-0.5 rounded-full border ${getCombinedStatusStyle(selectedOrder)}`}>
                     {getCombinedStatusLabel(selectedOrder)}
                   </span>
@@ -3894,8 +3898,8 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase block">Order ID</span>
-                        <span className="text-xs font-bold text-slate-800 truncate block mt-1" title={selectedOrder.id}>
-                          {selectedOrder.id?.substring(0, 8)}...
+                        <span className="text-xs font-bold text-slate-800 truncate block mt-1" title={formatOrderId(selectedOrder.invoiceNumber)}>
+                          {formatOrderId(selectedOrder.invoiceNumber)}
                         </span>
                       </div>
                       <div>
@@ -4798,7 +4802,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
             <div className="space-y-1">
               <h3 className="font-black text-slate-800 text-base tracking-tight">Confirm Stage Update</h3>
               <p className="text-xs text-slate-500 font-medium">
-                Order <span className="font-bold text-slate-700">{pendingStatusChange.invoiceNumber}</span>
+                Order <span className="font-bold text-slate-700">{formatOrderId(pendingStatusChange.invoiceNumber)}</span>
               </p>
             </div>
 

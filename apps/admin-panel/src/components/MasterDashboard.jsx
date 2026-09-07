@@ -24,6 +24,7 @@ const fmtK = (n) => {
 };
 const todayISO = () => new Date().toISOString().substring(0, 10);
 const isToday = (dateStr) => dateStr === todayISO();
+const formatOrderId = (inv) => inv ? String(inv).replace(/^INV-/i, 'ORD-') : (inv || '');
 
 const STATUS_COLORS = {
   PAID: 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -744,7 +745,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-amber-900 transition-colors truncate">{o.invoiceNumber}</p>
+                      <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-amber-900 transition-colors truncate">{formatOrderId(o.invoiceNumber)}</p>
                       <span className="text-[9px] text-slate-400 font-semibold truncate hidden sm:inline">
                         {o.items?.length || 1} item{o.items?.length === 1 ? '' : 's'}
                       </span>
@@ -808,7 +809,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                 className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/70 border border-slate-100 hover:bg-brand-50/40 hover:border-brand-200/60 transition-all cursor-pointer group shadow-2xs"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
+                  <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{formatOrderId(o.invoiceNumber)}</p>
                   <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
@@ -900,7 +901,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                     </div>
                     <div>
                       <p className="text-xs font-black text-[#3D2E3D] group-hover:text-amber-900 transition-colors">
-                        {o.invoiceNumber}
+                        {formatOrderId(o.invoiceNumber)}
                       </p>
                       <p className="text-[11px] font-bold text-slate-600 truncate">
                         {o.user?.fullName || o.customerName || 'Customer'}
@@ -1185,7 +1186,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-2 pr-3">Invoice</th>
+                  <th className="pb-2 pr-3">Order ID</th>
                   <th className="pb-2 pr-3">Customer</th>
                   <th className="pb-2 pr-3">Amount</th>
                   <th className="pb-2 pr-3">Status</th>
@@ -1202,7 +1203,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                     onClick={() => setSelectedOrderModal(o)}
                     className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
                   >
-                    <td className="py-2.5 pr-3 font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors text-[11px]">{o.invoiceNumber}</td>
+                    <td className="py-2.5 pr-3 font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors text-[11px]">{formatOrderId(o.invoiceNumber)}</td>
                     <td className="py-2.5 pr-3 text-slate-500 font-medium truncate max-w-[100px]">{o.customerName}</td>
                     <td className="py-2.5 pr-3 font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</td>
                     <td className="py-2.5 pr-3">
@@ -1251,7 +1252,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-extrabold text-[#3D2E3D]">{selectedOrderModal.invoiceNumber}</h3>
+                  <h3 className="text-xl font-extrabold text-[#3D2E3D]">{formatOrderId(selectedOrderModal.invoiceNumber)}</h3>
                   <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${STATUS_COLORS[selectedOrderModal.status] || 'bg-slate-100 text-slate-500'}`}>
                     {selectedOrderModal.status.replace(/_/g, ' ')}
                   </span>
