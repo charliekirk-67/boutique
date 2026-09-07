@@ -12,5 +12,9 @@
     "experimentalResolver": true
   },
   "include": ["src/**/*"],
-  "exclude": ["tests/**/*"]
+  "exclude": [
+    "src/__tests__/**/*",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
 }
