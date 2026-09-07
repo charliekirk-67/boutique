@@ -78,10 +78,10 @@ exports.globalRateLimiter = rateLimiter({
     prefix: 'global',
     keyGenerator: (req) => req.ip || 'unknown-ip',
 });
-// 5 requests per 15 minutes per IP/Phone/Email
+// 50 requests per 15 minutes per IP/Phone/Email
 exports.sensitiveRateLimiter = rateLimiter({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 50,
     prefix: 'sensitive',
     keyGenerator: (req) => {
         const identifier = req.body.phoneNumber || req.body.email || req.body.username || req.ip || 'unknown';
@@ -90,13 +90,13 @@ exports.sensitiveRateLimiter = rateLimiter({
 });
 exports.identifyIpLimiter = rateLimiter({
     windowMs: 60 * 1000,
-    max: 10,
+    max: 100,
     prefix: 'identify-ip',
     keyGenerator: (req) => req.ip || 'unknown-ip',
 });
 exports.identifyTargetLimiter = rateLimiter({
     windowMs: 10 * 60 * 1000,
-    max: 5,
+    max: 50,
     prefix: 'identify-target',
     keyGenerator: (req) => {
         let identifier = req.body.identifier || 'unknown';
