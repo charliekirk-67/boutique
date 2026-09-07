@@ -61,16 +61,27 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, curl, Render health checks)
     if (!origin) return callback(null, true);
-    // Allow any localhost / 127.0.0.1 origin ONLY in development
-    if (!isProduction) {
-      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-        return callback(null, true);
-      }
+
+    // Allow wildcard if configured
+    if (env.ALLOWED_ORIGINS === '*' || allowedOrigins.includes('*')) {
+      return callback(null, true);
     }
+
+    // Allow all Vercel deployment domains (*.vercel.app)
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Allow localhost and local dev origins
+    if (!isProduction || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      return callback(null, true);
+    }
+
     // Allow all known production origins
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     // Reject everything else
     return callback(new Error(`CORS: origin '${origin}' is not allowed`));
   },
