@@ -49,7 +49,7 @@ export async function seedDemoData() {
         description: 'Regal silhouette paired with tonal thread work and pearl buttons. Tailored for wedding celebrations.',
         price: 42000,
         categorySlug: 'ethnic-sherwanis',
-        images: ['https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800'],
+        images: ['https://images.unsplash.com/photo-1617137968427-85924c800a22?w=800'],
         materialInfo: 'Raw Silk with Chanderi Stole',
         targetGender: 'MEN',
       },
