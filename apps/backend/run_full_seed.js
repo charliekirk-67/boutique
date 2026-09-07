@@ -309,54 +309,104 @@ async function seed() {
   console.log('Appointments & Home Visits populated.');
 
   // 8. Analytics Events for Funnel
-  const eventTypes = ['PRODUCT_VIEW', 'PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_INITIATED', 'PURCHASE_COMPLETED'];
-  for (let day = 0; day < 30; day++) {
-    const eventTime = new Date(now - day * 86400000);
-    for (let k = 0; k < 12; k++) {
-      const prod = createdProducts[k % createdProducts.length];
-      const cust = customers[k % customers.length];
-      const evType = eventTypes[k % eventTypes.length];
-
-      await prisma.analyticsEvent.create({
-        data: {
+  const existingEvents = await prisma.analyticsEvent.count();
+  if (existingEvents === 0) {
+    const eventTypes = ['PRODUCT_VIEW', 'PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_INITIATED', 'PURCHASE_COMPLETED'];
+    const eventsToCreate = [];
+    for (let day = 0; day < 30; day++) {
+      const eventTime = new Date(now - day * 86400000);
+      for (let k = 0; k < 12; k++) {
+        const prod = createdProducts[k % createdProducts.length];
+        const cust = customers[k % customers.length];
+        const evType = eventTypes[k % eventTypes.length];
+        eventsToCreate.push({
           eventType: evType,
           productId: prod.id,
           userId: cust.id,
           createdAt: new Date(eventTime.getTime() - Math.random() * 36000000),
+        });
+      }
+    }
+    await prisma.analyticsEvent.createMany({ data: eventsToCreate });
+  }
+  console.log('Analytics Events verified.');
+
+  // 9. Support Tickets
+  const existingTickets = await prisma.supportTicket.count();
+  if (existingTickets === 0) {
+    const ticketTopics = [
+      { subject: 'Fitting appointment reschedule request', desc: 'Hi, I need to postpone my Friday fitting by 2 hours if possible.', status: 'IN_PROGRESS' },
+      { subject: 'Enquiry about custom Italian wool fabric samples', desc: 'Can your artisan bring fabric swatches for midnight blue tuxedo?', status: 'OPEN' },
+      { subject: 'Invoice copy required for company tax claim', desc: 'Please email the GST invoice for INV-2026-1042.', status: 'RESOLVED' },
+      { subject: 'Expedited stitching for wedding reception', desc: 'Wedding date moved up by 4 days, need priority stitching.', status: 'IN_PROGRESS' },
+    ];
+
+    for (let i = 0; i < ticketTopics.length; i++) {
+      const cust = customers[i % customers.length];
+      const top = ticketTopics[i];
+      await prisma.supportTicket.create({
+        data: {
+          userId: cust.id,
+          subject: top.subject,
+          description: top.desc,
+          status: top.status,
+          createdAt: new Date(now - (i + 1) * 86400000),
+          messages: {
+            create: [
+              { sender: 'CUSTOMER', senderName: cust.fullName, text: top.desc },
+              { sender: 'STAFF', senderName: 'MARCOS Concierge', text: 'Thank you for reaching out. Our team has received your request.' }
+            ]
+          }
         }
       });
     }
   }
-  console.log('Analytics Events populated.');
+  console.log('Support Tickets verified.');
 
-  // 9. Support Tickets
-  const ticketTopics = [
-    { subject: 'Fitting appointment reschedule request', desc: 'Hi, I need to postpone my Friday fitting by 2 hours if possible.', status: 'IN_PROGRESS' },
-    { subject: 'Enquiry about custom Italian wool fabric samples', desc: 'Can your artisan bring fabric swatches for midnight blue tuxedo?', status: 'OPEN' },
-    { subject: 'Invoice copy required for company tax claim', desc: 'Please email the GST invoice for INV-2026-1042.', status: 'RESOLVED' },
-    { subject: 'Expedited stitching for wedding reception', desc: 'Wedding date moved up by 4 days, need priority stitching.', status: 'IN_PROGRESS' },
-  ];
+  // 10. Demo Customer (Sanjai Pandian) for Real-Time Demo
+  const argon2 = require('argon2');
+  const demoHash = await argon2.hash('12345678');
+  const demoCustomer = await prisma.user.upsert({
+    where: { email: 'sanjaipandian.as@gmail.com' },
+    update: { passwordHash: demoHash, fullName: 'Sanjai Pandian' },
+    create: {
+      email: 'sanjaipandian.as@gmail.com',
+      phoneNumber: '+919000000002',
+      passwordHash: demoHash,
+      fullName: 'Sanjai Pandian',
+      role: 'CUSTOMER',
+      referralCode: 'REF-SANJAI-0001',
+      pointsBalance: 500,
+    },
+  });
 
-  for (let i = 0; i < ticketTopics.length; i++) {
-    const cust = customers[i % customers.length];
-    const top = ticketTopics[i];
-    await prisma.supportTicket.create({
+  const demoInvoice = 'INV-1788757453542-F24CA99E';
+  const existingDemoOrder = await prisma.order.findUnique({ where: { invoiceNumber: demoInvoice } });
+  if (!existingDemoOrder && createdProducts.length > 0) {
+    const demoProd = createdProducts[0];
+    await prisma.order.create({
       data: {
-        userId: cust.id,
-        subject: top.subject,
-        description: top.desc,
-        status: top.status,
-        createdAt: new Date(now - (i + 1) * 86400000),
-        messages: {
-          create: [
-            { sender: 'CUSTOMER', senderName: cust.fullName, text: top.desc },
-            { sender: 'STAFF', senderName: 'MARCOS Concierge', text: 'Thank you for reaching out. Our team has received your request.' }
-          ]
+        userId: demoCustomer.id,
+        invoiceNumber: demoInvoice,
+        status: 'PAID', // In Measurement stage
+        totalAmount: demoProd.price,
+        taxAmount: 0,
+        payableAmount: demoProd.price,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'COMPLETED',
+        isOfflineSales: true,
+        deliveryDate: new Date(now + 14 * 86400000),
+        fabricType: demoProd.materialInfo || 'Silk Organza',
+        customizations: 'Custom blouse stitching with golden zari embroidery on cuffs and neckline',
+        tailorNotes: 'Deliver before wedding on next week',
+        orderItems: {
+          create: [{ productId: demoProd.id, quantity: 1, price: demoProd.price }]
         }
       }
     });
+    console.log('Verified Sanjai Pandian demo order in Measurement stage.');
   }
-  console.log('Support Tickets populated.');
+
   console.log('--- ALL SEEDING COMPLETE ---');
 }
 
