@@ -101,4 +101,11 @@ router.post('/promos', restrictToAdmin, validate(promoCreateSchema), PromoConten
 router.put('/promos/:id', restrictToAdmin, validate(promoUpdateSchema), PromoContentController.updatePromo);
 router.delete('/promos/:id', restrictToAdmin, PromoContentController.deletePromo);
 
+// Trigger Demo Data & Customer Accounts Seeding
+router.post('/seed-demo-data', restrictToAdmin, async (req, res) => {
+  const { seedDemoData } = await import('../services/seedDemoData.js');
+  const result = await seedDemoData();
+  return res.status(200).json(result);
+});
+
 export default router;

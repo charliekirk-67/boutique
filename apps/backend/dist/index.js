@@ -24,6 +24,10 @@ server.headersTimeout = 66000;
 // 2. Initialize Background Task Workers
 (0, jobs_worker_js_1.initWorker)();
 (0, analytics_worker_js_1.startAnalyticsFlushWorker)();
+// 3. Automated Demo Data & Customer Accounts Verification
+import('./services/seedDemoData.js')
+    .then(m => m.seedDemoData())
+    .catch(err => logger_js_1.default.error('Demo data seed failed:', { metadata: { error: err.message } }));
 // Graceful shutdown handler
 async function gracefulShutdown(signal) {
     logger_js_1.default.info(`${signal} received. Starting graceful shutdown...`);

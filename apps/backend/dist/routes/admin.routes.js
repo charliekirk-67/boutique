@@ -77,4 +77,10 @@ router.get('/promos', restrictToAdmin, promoContent_controller_js_1.PromoContent
 router.post('/promos', restrictToAdmin, (0, validate_middleware_js_1.validate)(promoContent_controller_js_1.promoCreateSchema), promoContent_controller_js_1.PromoContentController.createPromo);
 router.put('/promos/:id', restrictToAdmin, (0, validate_middleware_js_1.validate)(promoContent_controller_js_1.promoUpdateSchema), promoContent_controller_js_1.PromoContentController.updatePromo);
 router.delete('/promos/:id', restrictToAdmin, promoContent_controller_js_1.PromoContentController.deletePromo);
+// Trigger Demo Data & Customer Accounts Seeding
+router.post('/seed-demo-data', restrictToAdmin, async (req, res) => {
+    const { seedDemoData } = await import('../services/seedDemoData.js');
+    const result = await seedDemoData();
+    return res.status(200).json(result);
+});
 exports.default = router;

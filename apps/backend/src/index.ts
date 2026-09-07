@@ -26,6 +26,11 @@ initSocket(server);
 initWorker();
 startAnalyticsFlushWorker();
 
+// 3. Automated Demo Data & Customer Accounts Verification
+import('./services/seedDemoData.js')
+  .then(m => m.seedDemoData())
+  .catch(err => logger.error('Demo data seed failed:', { metadata: { error: err.message } }));
+
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string) {
   logger.info(`${signal} received. Starting graceful shutdown...`);
