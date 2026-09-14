@@ -16,7 +16,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.sanjaipandian.mobile",
+      "package": "com.marcos.boutique",
+      "versionCode": 2,
       "config": {
         "googleMaps": {
           "apiKey": ""
