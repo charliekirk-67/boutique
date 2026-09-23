@@ -47,11 +47,6 @@ export function rateLimiter(options: RateLimitOptions) {
       const count = results && results[0] && results[0][1] ? (results[0][1] as number) : 1;
 
       if (count > options.max) {
-        // Automatically block for 15 minutes if it violates the sensitive rate limit threshold
-        if (options.prefix === 'sensitive') {
-          await redis.set(cooldownKey, 'blocked', 'EX', 900); // 15 mins block
-        }
-        
         return res.status(429).json({
           success: false,
           message: 'Too many requests. Please try again later.',
@@ -78,18 +73,18 @@ export function rateLimiter(options: RateLimitOptions) {
   };
 }
 
-// 1500 requests per 15 minutes per IP (for 10K concurrent users)
+// 5000 requests per 15 minutes per IP
 export const globalRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 1500,
+  max: 5000,
   prefix: 'global',
   keyGenerator: (req) => req.ip || 'unknown-ip',
 });
 
-// 50 requests per 15 minutes per IP/Phone/Email
+// 500 requests per 15 minutes per IP/Phone/Email (no hard lockout)
 export const sensitiveRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 500,
   prefix: 'sensitive',
   keyGenerator: (req) => {
     const identifier = req.body.phoneNumber || req.body.email || req.body.username || req.ip || 'unknown';
@@ -99,14 +94,14 @@ export const sensitiveRateLimiter = rateLimiter({
 
 export const identifyIpLimiter = rateLimiter({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 300,
   prefix: 'identify-ip',
   keyGenerator: (req) => req.ip || 'unknown-ip',
 });
 
 export const identifyTargetLimiter = rateLimiter({
   windowMs: 10 * 60 * 1000,
-  max: 50,
+  max: 500,
   prefix: 'identify-target',
   keyGenerator: (req) => {
     let identifier = req.body.identifier || 'unknown';
