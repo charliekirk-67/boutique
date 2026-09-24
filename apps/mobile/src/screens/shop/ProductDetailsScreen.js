@@ -21,7 +21,9 @@ import {
   Share2,
   CalendarCheck,
   Sparkles,
-  Truck
+  Truck,
+  ShoppingBag,
+  Zap
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -484,35 +486,71 @@ export default function ProductDetailsScreen({ route, navigation }) {
         )}
       </ScrollView>
 
-      {/* Bottom Actions Row */}
-      <View style={[styles.bottomActionsRow, shadows.premium]}>
-        {/* Wishlist / Heart Button */}
-        <TouchableOpacity
-          style={[
-            styles.wishlistActionBtn,
-            { borderColor: isFav ? '#ef4444' : theme.border, backgroundColor: isFav ? '#fff0f0' : theme.bg.card }
-          ]}
-          onPress={toggleFavorite}
-          activeOpacity={0.8}
-        >
-          <WishlistIcon
-            size={24}
-            color={isFav ? '#ef4444' : theme.brand[900]}
-            fill={isFav ? '#ef4444' : 'transparent'}
-          />
-        </TouchableOpacity>
+      {/* Bottom Actions - Two Row Layout */}
+      <View style={[styles.bottomActionsContainer, shadows.premium]}>
+        {/* Top Row: Add to Cart + Buy Now */}
+        <View style={styles.topActionsRow}>
+          <TouchableOpacity
+            style={[
+              styles.addToCartBtn,
+              { borderColor: theme.brand[500], backgroundColor: theme.bg.card }
+            ]}
+            onPress={handleAddToCart}
+            activeOpacity={0.8}
+            disabled={adding}
+          >
+            {adding ? (
+              <ActivityIndicator size="small" color={theme.brand[500]} />
+            ) : (
+              <>
+                <ShoppingBag size={17} color={theme.brand[500]} style={{ marginRight: 7 }} />
+                <Text style={[styles.addToCartBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                  {isInCart ? 'GO TO CART' : 'ADD TO CART'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        {/* Book a Slot Button */}
-        <TouchableOpacity
-          style={[styles.bookSlotBtn, { backgroundColor: theme.brand[500] }]}
-          onPress={handleBookConsultation}
-          activeOpacity={0.8}
-        >
-          <CalendarCheck size={20} color="#3D2E3D" style={{ marginRight: 10 }} />
-          <Text style={[styles.bookSlotBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
-            BOOK A SLOT
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.buyNowBtn, { backgroundColor: '#3D2E3D' }]}
+            onPress={handleBuyNow}
+            activeOpacity={0.8}
+          >
+            <Zap size={17} color="#ffffff" style={{ marginRight: 7 }} />
+            <Text style={[styles.buyNowBtnText, { fontFamily: fonts.bold, color: '#ffffff' }]}>
+              BUY NOW
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Row: Wishlist + Book a Slot */}
+        <View style={styles.bottomActionsRow}>
+          <TouchableOpacity
+            style={[
+              styles.wishlistActionBtn,
+              { borderColor: isFav ? '#ef4444' : theme.border, backgroundColor: isFav ? '#fff0f0' : theme.bg.card }
+            ]}
+            onPress={toggleFavorite}
+            activeOpacity={0.8}
+          >
+            <WishlistIcon
+              size={22}
+              color={isFav ? '#ef4444' : theme.brand[900]}
+              fill={isFav ? '#ef4444' : 'transparent'}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.bookSlotBtn, { backgroundColor: theme.brand[500] }]}
+            onPress={handleBookConsultation}
+            activeOpacity={0.8}
+          >
+            <CalendarCheck size={18} color="#3D2E3D" style={{ marginRight: 8 }} />
+            <Text style={[styles.bookSlotBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
+              BOOK A SLOT
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -555,7 +593,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 175,
     paddingHorizontal: 20,
   },
   imageCard: {
@@ -710,39 +748,71 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     lineHeight: 20,
   },
-  bottomActionsRow: {
+  bottomActionsContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f2',
   },
+  topActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  addToCartBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addToCartBtnText: {
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  buyNowBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buyNowBtnText: {
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  bottomActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   wishlistActionBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bookSlotBtn: {
     flex: 1,
-    height: 56,
-    borderRadius: 16,
+    height: 48,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   bookSlotBtnText: {
-    fontSize: 14,
-    letterSpacing: 1.2,
+    fontSize: 13,
+    letterSpacing: 1.1,
   },
   similarSection: {
     marginTop: 32,

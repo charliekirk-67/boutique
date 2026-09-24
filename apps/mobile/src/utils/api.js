@@ -9,7 +9,7 @@ import Constants from 'expo-constants';
 const getApiUrl = () => {
   // If running in production mode (production APK/AAB or App Store bundle), use the public production URL
   if (typeof __DEV__ !== 'undefined' && !__DEV__) {
-    const prodUrl = 'https://boutique-vyr6.onrender.com/api/v1'; // Live Render backend domain
+    const prodUrl = 'https://marcos-backend-live.onrender.com/api/v1'; // Live Render backend domain
     console.log('[API] Production build: using server URL:', prodUrl);
     return prodUrl;
   }
@@ -36,7 +36,7 @@ const getApiUrl = () => {
   }
 
   // 4. Fallback to active laptop Wi-Fi IP
-  const defaultWifiIp = '192.168.0.102';
+  const defaultWifiIp = '192.168.0.101';
   console.log('[API] Using Wi-Fi LAN IP fallback:', `http://${defaultWifiIp}:5000/api/v1`);
   return `http://${defaultWifiIp}:5000/api/v1`;
 };

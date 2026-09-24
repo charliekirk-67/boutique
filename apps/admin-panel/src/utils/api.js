@@ -2,7 +2,7 @@
 // API Configuration
 const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5000/api/v1'
-  : (import.meta.env.VITE_API_URL || 'https://boutique-vyr6.onrender.com/api/v1');
+  : (import.meta.env.VITE_API_URL || 'https://marcos-backend-live.onrender.com/api/v1');
 
 class APIClient {
   constructor() {
@@ -585,9 +585,9 @@ class APIClient {
   }
 
   // STORE VISITS
-  async getStoreVisits() {
+  async getStoreVisits(page = 1, limit = 500) {
 
-    const res = await this.request('/visits');
+    const res = await this.request(`/visits?page=${page}&limit=${limit}`);
     return res.data.map(visit => ({
       ...visit,
       customerName: visit.customer?.fullName || 'Customer',
