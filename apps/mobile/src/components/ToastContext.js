@@ -230,7 +230,7 @@ export const ToastProvider = ({ children }) => {
               {toast.type !== 'cart' && toast.type !== 'wishlist' && (
                 <View style={styles.iconWrapper}>{renderIcon()}</View>
               )}
-              <Text style={getTextStyle()} numberOfLines={1} ellipsizeMode="tail">
+              <Text style={getTextStyle()} numberOfLines={3} ellipsizeMode="tail">
                 {toast.message}
               </Text>
             </View>

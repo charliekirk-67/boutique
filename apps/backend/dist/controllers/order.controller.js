@@ -688,8 +688,8 @@ class OrderController {
                         const product = productMap.get(item.productId);
                         const newInventoryQty = product.inventoryQty - item.quantity;
                         const newStockStatus = (0, product_controller_js_1.computeStockStatus)(newInventoryQty);
-                        // Assuming uuid, int, and enum types
-                        values.push(`('${item.productId}'::uuid, ${item.quantity}::int, '${newStockStatus}'::"StockStatus")`);
+                        // Use ::text cast since Prisma maps String id to text in PostgreSQL
+                        values.push(`('${item.productId}'::text, ${item.quantity}::int, '${newStockStatus}'::"StockStatus")`);
                     }
                     const query = `
             UPDATE "Product" AS p

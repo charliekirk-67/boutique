@@ -390,7 +390,20 @@ export default function CheckoutScreen({ route, navigation }) {
 
   const getSelectedAddress = () => {
     const list = getParsedAddresses();
-    return list.find(a => a.selected) || list[0] || null;
+    if (list.length > 0) {
+      return list.find(a => a.selected) || list[0];
+    }
+    return {
+      id: 'default_address',
+      name: userProfile?.fullName || 'Valued Customer',
+      address: 'Marcos Boutique Suite, Central Avenue, Chennai - 600001',
+      city: 'Chennai',
+      area: 'Central',
+      pincode: '600001',
+      phone: userProfile?.phoneNumber || '+919000000001',
+      selected: true,
+      type: 'home'
+    };
   };
 
   // Coupon handling

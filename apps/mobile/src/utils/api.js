@@ -6,12 +6,15 @@ import Constants from 'expo-constants';
 // Central configuration for API endpoints.
 // Auto-detects local host IP from Expo Constants when running in local development mode
 // so that testing on physical mobile devices connects successfully to the server.
+// Toggle to true to connect Expo Go / Dev directly to live Render cloud backend
+const USE_CLOUD_BACKEND = true;
+const CLOUD_BACKEND_URL = 'https://marcos-backend-live.onrender.com/api/v1';
+
 const getApiUrl = () => {
-  // If running in production mode (production APK/AAB or App Store bundle), use the public production URL
-  if (typeof __DEV__ !== 'undefined' && !__DEV__) {
-    const prodUrl = 'https://marcos-backend-live.onrender.com/api/v1'; // Live Render backend domain
-    console.log('[API] Production build: using server URL:', prodUrl);
-    return prodUrl;
+  // Always use the live cloud backend if USE_CLOUD_BACKEND is enabled or if in production build
+  if (USE_CLOUD_BACKEND || (typeof __DEV__ !== 'undefined' && !__DEV__)) {
+    console.log('[API] Using live cloud server:', CLOUD_BACKEND_URL);
+    return CLOUD_BACKEND_URL;
   }
 
   // 1. Web Platform (Browser)
@@ -40,7 +43,6 @@ const getApiUrl = () => {
   console.log('[API] Using Wi-Fi LAN IP fallback:', `http://${defaultWifiIp}:5000/api/v1`);
   return `http://${defaultWifiIp}:5000/api/v1`;
 };
-
 
 export const API_URL = getApiUrl();
 
