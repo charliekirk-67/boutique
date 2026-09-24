@@ -1,12 +1,14 @@
 import { Queue } from 'bullmq';
 import { connectionOptions, QUEUE_NAME } from './queue.config.js';
+import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isDevelopment } from '../config/environment.js';
 import { handleGenerateInvoicePdf, handleSendNotification, handleCreditReferralPoints } from './jobs.worker.js';
 
 let jobsQueue: Queue | null = null;
 
-if (!isDevelopment) {
+const hasRealRedis = env.REDIS_URL && !env.REDIS_URL.includes('localhost') && !env.REDIS_URL.includes('127.0.0.1');
+if (!isDevelopment && hasRealRedis) {
   try {
     jobsQueue = new Queue(QUEUE_NAME, {
       connection: connectionOptions,

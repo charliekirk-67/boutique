@@ -5,8 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QUEUE_NAME = exports.connectionOptions = void 0;
 const env_js_1 = __importDefault(require("../config/env.js"));
-// Connection details derived from Redis URL
-const url = new URL(env_js_1.default.REDIS_URL);
+let url;
+try {
+    url = new URL(env_js_1.default.REDIS_URL || 'redis://127.0.0.1:6379');
+}
+catch {
+    url = new URL('redis://127.0.0.1:6379');
+}
 exports.connectionOptions = {
     host: url.hostname || '127.0.0.1',
     port: parseInt(url.port || '6379'),

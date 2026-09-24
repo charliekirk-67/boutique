@@ -6,12 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startAnalyticsFlushWorker = startAnalyticsFlushWorker;
 const redis_js_1 = __importDefault(require("../config/redis.js"));
 const db_js_1 = __importDefault(require("../config/db.js"));
+const env_js_1 = __importDefault(require("../config/env.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const environment_js_1 = require("../config/environment.js");
 const CHUNK_SIZE = 5000;
 function startAnalyticsFlushWorker() {
-    if (environment_js_1.isDevelopment) {
-        logger_js_1.default.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
+    const hasRealRedis = env_js_1.default.REDIS_URL && !env_js_1.default.REDIS_URL.includes('localhost') && !env_js_1.default.REDIS_URL.includes('127.0.0.1');
+    if (environment_js_1.isDevelopment || !hasRealRedis) {
+        logger_js_1.default.info('Background Analytics Flush Worker disabled (no external Redis configured).');
         return;
     }
     logger_js_1.default.info('Background Analytics Flush Worker started.');

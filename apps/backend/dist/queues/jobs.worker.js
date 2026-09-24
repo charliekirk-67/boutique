@@ -9,6 +9,7 @@ exports.handleSendNotification = handleSendNotification;
 exports.handleCreditReferralPoints = handleCreditReferralPoints;
 const bullmq_1 = require("bullmq");
 const queue_config_js_1 = require("./queue.config.js");
+const env_js_1 = __importDefault(require("../config/env.js"));
 const db_js_1 = __importDefault(require("../config/db.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const pdf_service_js_1 = __importDefault(require("../services/pdf.service.js"));
@@ -21,8 +22,9 @@ const socket_handler_js_1 = require("../socket/socket.handler.js");
 const environment_js_1 = require("../config/environment.js");
 let worker;
 function initWorker() {
-    if (environment_js_1.isDevelopment) {
-        logger_js_1.default.info('BullMQ Background Worker disabled in development to save Redis limits.');
+    const hasRealRedis = env_js_1.default.REDIS_URL && !env_js_1.default.REDIS_URL.includes('localhost') && !env_js_1.default.REDIS_URL.includes('127.0.0.1');
+    if (environment_js_1.isDevelopment || !hasRealRedis) {
+        logger_js_1.default.info('BullMQ Background Worker disabled (no external Redis configured).');
         return;
     }
     worker = new bullmq_1.Worker(queue_config_js_1.QUEUE_NAME, async (job) => {

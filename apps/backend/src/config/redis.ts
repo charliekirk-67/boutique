@@ -15,19 +15,21 @@ const redisOptions = {
   },
 };
 
-if (isDevOrTest) {
+if (isDevOrTest || !env.REDIS_URL || env.REDIS_URL.includes('localhost') || env.REDIS_URL.includes('127.0.0.1')) {
   try {
     const RedisMock = require('ioredis-mock');
     redis = new RedisMock();
+    console.log('[REDIS] Using in-memory Redis mock (no external Redis required).');
   } catch (err) {
-    redis = new Redis(env.REDIS_URL, redisOptions);
+    redis = new Redis(env.REDIS_URL || 'redis://localhost:6379', redisOptions);
   }
 } else {
   redis = new Redis(env.REDIS_URL, redisOptions);
 }
 
 redis.on('error', (err: any) => {
-  console.error('Redis Client Error:', err);
+  // Silent warning instead of crashing
+  console.warn('[REDIS WARNING]: Redis not connected, falling back gracefully:', err.message);
 });
 
 export { redis };

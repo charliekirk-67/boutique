@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 import env from '../config/env.js';
 
 export function createRedisAdapter() {
-  const pubClient = new Redis(env.REDIS_URL, {
+  const pubClient = new Redis(env.REDIS_URL || 'redis://127.0.0.1:6379', {
     maxRetriesPerRequest: null,
   });
   

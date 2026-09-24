@@ -1,7 +1,11 @@
 import env from '../config/env.js';
 
-// Connection details derived from Redis URL
-const url = new URL(env.REDIS_URL);
+let url: URL;
+try {
+  url = new URL(env.REDIS_URL || 'redis://127.0.0.1:6379');
+} catch {
+  url = new URL('redis://127.0.0.1:6379');
+}
 
 export const connectionOptions: any = {
   host: url.hostname || '127.0.0.1',

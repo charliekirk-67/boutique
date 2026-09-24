@@ -8,7 +8,7 @@ const redis_adapter_1 = require("@socket.io/redis-adapter");
 const ioredis_1 = __importDefault(require("ioredis"));
 const env_js_1 = __importDefault(require("../config/env.js"));
 function createRedisAdapter() {
-    const pubClient = new ioredis_1.default(env_js_1.default.REDIS_URL, {
+    const pubClient = new ioredis_1.default(env_js_1.default.REDIS_URL || 'redis://127.0.0.1:6379', {
         maxRetriesPerRequest: null,
     });
     const subClient = pubClient.duplicate();

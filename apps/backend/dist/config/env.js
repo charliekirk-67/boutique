@@ -13,7 +13,7 @@ const envSchema = zod_1.z.object({
     APP_NAME: zod_1.z.string().default('MARCOS'),
     APP_VERSION: zod_1.z.string().default('1.0.0'),
     DATABASE_URL: zod_1.z.string().url(),
-    REDIS_URL: zod_1.z.string().url(),
+    REDIS_URL: zod_1.z.string().optional(),
     JWT_ACCESS_SECRET: zod_1.z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
     JWT_REFRESH_SECRET: zod_1.z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
     ALLOWED_ORIGINS: zod_1.z.string().default(''),

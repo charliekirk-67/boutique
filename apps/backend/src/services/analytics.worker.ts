@@ -1,13 +1,15 @@
 import redis from '../config/redis.js';
 import prisma from '../config/db.js';
+import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isDevelopment } from '../config/environment.js';
 
 const CHUNK_SIZE = 5000;
 
 export function startAnalyticsFlushWorker() {
-  if (isDevelopment) {
-    logger.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
+  const hasRealRedis = env.REDIS_URL && !env.REDIS_URL.includes('localhost') && !env.REDIS_URL.includes('127.0.0.1');
+  if (isDevelopment || !hasRealRedis) {
+    logger.info('Background Analytics Flush Worker disabled (no external Redis configured).');
     return;
   }
   logger.info('Background Analytics Flush Worker started.');

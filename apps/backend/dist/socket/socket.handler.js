@@ -30,20 +30,20 @@ function initSocket(server) {
             credentials: true,
         },
     });
-    // Attach Redis adapter for horizontal scaling ONLY in production
-    // In development, the in-memory adapter works fine and avoids thousands of Redis commands/min
-    if (environment_js_1.isProduction) {
+    // Attach Redis adapter for horizontal scaling ONLY if external Redis is configured
+    const hasRealRedis = env_js_1.default.REDIS_URL && !env_js_1.default.REDIS_URL.includes('localhost') && !env_js_1.default.REDIS_URL.includes('127.0.0.1');
+    if (environment_js_1.isProduction && hasRealRedis) {
         try {
             const adapter = (0, socket_adapter_js_1.createRedisAdapter)();
             io.adapter(adapter);
             logger_js_1.default.info('Socket.io Redis adapter attached (production mode).');
         }
         catch (err) {
-            logger_js_1.default.error('Failed to attach Socket.io Redis adapter', { metadata: { error: err.message } });
+            logger_js_1.default.error('Failed to attach Socket.io Redis adapter, using in-memory', { metadata: { error: err.message } });
         }
     }
     else {
-        logger_js_1.default.info('Socket.io using in-memory adapter (development mode — Redis adapter skipped to save commands).');
+        logger_js_1.default.info('Socket.io using built-in memory adapter.');
     }
     // Handshake Token validation Middleware
     io.use(async (socket, next) => {

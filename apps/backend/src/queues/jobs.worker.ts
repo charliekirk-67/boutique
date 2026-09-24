@@ -1,5 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { connectionOptions, QUEUE_NAME } from './queue.config.js';
+import env from '../config/env.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
 import PdfService from '../services/pdf.service.js';
@@ -14,8 +15,9 @@ import { isDevelopment } from '../config/environment.js';
 let worker: Worker;
 
 export function initWorker() {
-  if (isDevelopment) {
-    logger.info('BullMQ Background Worker disabled in development to save Redis limits.');
+  const hasRealRedis = env.REDIS_URL && !env.REDIS_URL.includes('localhost') && !env.REDIS_URL.includes('127.0.0.1');
+  if (isDevelopment || !hasRealRedis) {
+    logger.info('BullMQ Background Worker disabled (no external Redis configured).');
     return;
   }
   worker = new Worker(

@@ -6,12 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.jobsQueue = exports.JobsProducer = void 0;
 const bullmq_1 = require("bullmq");
 const queue_config_js_1 = require("./queue.config.js");
+const env_js_1 = __importDefault(require("../config/env.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const environment_js_1 = require("../config/environment.js");
 const jobs_worker_js_1 = require("./jobs.worker.js");
 let jobsQueue = null;
 exports.jobsQueue = jobsQueue;
-if (!environment_js_1.isDevelopment) {
+const hasRealRedis = env_js_1.default.REDIS_URL && !env_js_1.default.REDIS_URL.includes('localhost') && !env_js_1.default.REDIS_URL.includes('127.0.0.1');
+if (!environment_js_1.isDevelopment && hasRealRedis) {
     try {
         exports.jobsQueue = jobsQueue = new bullmq_1.Queue(queue_config_js_1.QUEUE_NAME, {
             connection: queue_config_js_1.connectionOptions,
