@@ -46,4 +46,7 @@ async function main() {
 }
 main()
     .catch(console.error)
-    .finally(() => db_js_1.default.$disconnect());
+    .finally(async () => {
+    await db_js_1.default.$disconnect();
+    process.exit(0);
+});
