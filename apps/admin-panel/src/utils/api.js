@@ -1092,23 +1092,14 @@ class APIClient {
   }
 
   async uploadImage(file) {
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await this.request('/admin/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      return res.data.url;
-    } catch (e) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(reader.result);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await this.request('/admin/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res?.data?.url) throw new Error('Image upload did not return a URL.');
+    return res.data.url;
   }
 }
 

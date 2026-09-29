@@ -8,7 +8,7 @@ export const categoryCreateSchema = z.object({
   body: z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
-    imageUrl: z.string().url().optional(),
+    imageUrl: z.union([z.string().url(), z.literal('')]).optional(),
     order: z.coerce.number().int().default(0),
     parentId: z.string().uuid().optional().nullable(),
   }),
@@ -18,7 +18,7 @@ export const categoryUpdateSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
     slug: z.string().min(1).optional(),
-    imageUrl: z.string().url().optional(),
+    imageUrl: z.union([z.string().url(), z.literal('')]).optional(),
     order: z.coerce.number().int().optional(),
     parentId: z.string().uuid().optional().nullable(),
   }),
@@ -52,7 +52,7 @@ export class AdminCategoryController {
       }
 
       const category = await prisma.category.create({
-        data: { name, slug, order, imageUrl, parentId: parentId || null },
+        data: { name, slug, order, imageUrl: imageUrl || null, parentId: parentId || null },
       });
 
       await createAuditLog({
@@ -95,7 +95,7 @@ export class AdminCategoryController {
 
       const category = await prisma.category.update({
         where: { id },
-        data: { name, slug, order, imageUrl, parentId: parentId !== undefined ? parentId : undefined },
+        data: { name, slug, order, imageUrl: imageUrl === undefined ? undefined : imageUrl || null, parentId: parentId !== undefined ? parentId : undefined },
       });
 
       await createAuditLog({

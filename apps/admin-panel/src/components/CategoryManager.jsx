@@ -1,422 +1,213 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  ArrowUp, 
-  ArrowDown,
-  Layers,
-  Check,
-  X,
-  ChevronDown,
-  ChevronRight,
-  FolderPlus,
-  Image as ImageIcon,
-  Upload,
-  Loader
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Check, ChevronDown, ChevronRight, FolderPlus, Image as ImageIcon,
+  Layers, Loader, Pencil, Plus, Trash2, Upload, X,
 } from 'lucide-react';
 import api from '../utils/api';
 
-export default function CategoryManager() {
-  const [categories, setCategories] = useState([]);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatImageUrl, setNewCatImageUrl] = useState('');
-  const [uploadingNewCatImage, setUploadingNewCatImage] = useState(false);
+const slugify = (value) => value.trim().toLowerCase()
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+function ImagePicker({ value, onChange, disabled = false, compact = false }) {
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const list = await api.getCategories();
-      setCategories(list);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleImageUpload = async (e, setUploading, setUrl) => {
-    const file = e.target.files[0];
+  const handleFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setError('');
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Choose an image file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be 5 MB or smaller.');
+      return;
+    }
+    setUploading(true);
     try {
-      setUploading(true);
-      const uploadedUrl = await api.uploadImage(file);
-      setUrl(uploadedUrl);
-    } catch (err) {
-      setError('Image upload failed');
+      const url = await api.uploadImage(file);
+      if (!url || !/^https?:\/\//i.test(url)) throw new Error('The server did not return a usable image URL.');
+      onChange(url);
+    } catch (uploadError) {
+      setError(uploadError.message || 'Image upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
-  const handleAddRoot = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    if (!newCatName.trim()) return;
-
-    try {
-      await api.createCategory({
-        name: newCatName.trim(),
-        slug: newCatName.trim().toLowerCase().replace(/ /g, '-'),
-        imageUrl: newCatImageUrl || undefined,
-        order: categories.length + 1,
-        parentId: null
-      });
-      setNewCatName('');
-      setNewCatImageUrl('');
-      setSuccess('Root category added successfully!');
-      loadCategories();
-    } catch (err) {
-      setError(err.message || 'Add failed.');
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      {/* Header section */}
-      <div>
-        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">Category Console</h2>
-        <p className="text-xs text-slate-500 font-medium">Create infinite N-level categories and organize your store's taxonomy</p>
+    <div className={`flex ${compact ? 'items-center gap-2' : 'items-start gap-3'}`}>
+      <div className={`${compact ? 'h-12 w-12' : 'h-20 w-20'} relative shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50`}>
+        {value ? (
+          <img src={value} alt="Category cover preview" className="h-full w-full object-cover" onError={() => setError('This image could not be loaded. Upload it again or remove it.')} />
+        ) : <div className="flex h-full items-center justify-center"><ImageIcon className="h-5 w-5 text-slate-300" /></div>}
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Add Root Category Form (4 cols) */}
-        <div className="lg:col-span-4 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium h-max space-y-4">
-          <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-            <Layers className="w-4 h-4 text-brand-500" />
-            <span>Create Root Category</span>
-          </h3>
-
-          <form onSubmit={handleAddRoot} className="space-y-4">
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs font-semibold">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-xs font-semibold">
-                {success}
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase block">Category Name</label>
-              <input
-                type="text"
-                value={newCatName}
-                onChange={e => setNewCatName(e.target.value)}
-                placeholder="e.g. Men"
-                className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase block">Category Image</label>
-              <div className="flex items-center gap-3">
-                {newCatImageUrl ? (
-                  <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shrink-0">
-                    <img src={newCatImageUrl} alt="Category" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setNewCatImageUrl('')}
-                      className="absolute top-0.5 right-0.5 p-0.5 bg-black/50 text-white rounded-full hover:bg-black/70"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                    <ImageIcon className="w-4 h-4 text-slate-300" />
-                  </div>
-                )}
-                
-                <label className="flex-1 cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e, setUploadingNewCatImage, setNewCatImageUrl)}
-                    className="hidden"
-                    disabled={uploadingNewCatImage}
-                  />
-                  <div className={`w-full py-2 px-3 border border-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${uploadingNewCatImage ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                    {uploadingNewCatImage ? (
-                      <><Loader className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
-                    ) : (
-                      <><Upload className="w-3.5 h-3.5" /> Upload Image</>
-                    )}
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-sm transition-colors"
-            >
-              Add Root Category
-            </button>
-          </form>
-
-          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl mt-4">
-            <p className="text-[10px] text-blue-600 font-bold flex items-center gap-1.5">
-              <FolderPlus className="w-3.5 h-3.5" />
-              You can infinitely nest sub-categories from the list panel.
-            </p>
-          </div>
-        </div>
-
-        {/* Categories Tree List (8 cols) */}
-        <div className="lg:col-span-8 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-800 text-sm">Category Hierarchy</h3>
-          </div>
-
-          <div className="divide-y divide-slate-100 border border-slate-150 rounded-2xl overflow-hidden bg-slate-50/30">
-            {categories.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 font-bold">
-                No categories defined.
-              </div>
-            ) : (
-              categories.map((cat, index) => (
-                <CategoryNode 
-                  key={cat.id} 
-                  category={cat} 
-                  depth={0} 
-                  index={index} 
-                  total={categories.length} 
-                  loadCategories={loadCategories} 
-                />
-              ))
-            )}
-          </div>
-        </div>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 ${disabled || uploading ? 'cursor-not-allowed opacity-60' : ''}`}>
+          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={handleFile} disabled={disabled || uploading} />
+          {uploading ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          {uploading ? 'Uploading…' : value ? 'Change image' : 'Upload cover'}
+        </label>
+        {value && <button type="button" onClick={() => { onChange(''); setError(''); }} disabled={disabled || uploading} className="ml-2 text-xs font-semibold text-red-500 hover:text-red-700">Remove</button>}
+        <p className="text-[10px] text-slate-400">JPG, PNG, GIF or WebP · up to 5 MB</p>
+        {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
       </div>
     </div>
   );
 }
 
-// Recursive Component for N-Level Tree
-function CategoryNode({ category, depth, index, total, loadCategories }) {
-  const [expanded, setExpanded] = useState(depth === 0); // Root expanded by default
-  const [editingId, setEditingId] = useState(null);
-  const [editingName, setEditingName] = useState('');
-  const [editingImageUrl, setEditingImageUrl] = useState('');
-  const [uploadingEditImage, setUploadingEditImage] = useState(false);
-  const [isAddingSub, setIsAddingSub] = useState(false);
-  const [newSubName, setNewSubName] = useState('');
+export default function CategoryManager() {
+  const [categories, setCategories] = useState([]);
+  const [name, setName] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const hasChildren = category.subCategories && category.subCategories.length > 0;
-  const pl = depth * 24; // Indentation calculation
-
-  const handleStartEdit = () => {
-    setEditingId(category.id);
-    setEditingName(category.name);
-    setEditingImageUrl(category.imageUrl || '');
-  };
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const loadCategories = useCallback(async () => {
     try {
-      setUploadingEditImage(true);
-      const uploadedUrl = await api.uploadImage(file);
-      setEditingImageUrl(uploadedUrl);
-    } catch (err) {
-      alert('Image upload failed');
+      setError('');
+      const list = await api.getCategories();
+      setCategories(Array.isArray(list) ? list : []);
+    } catch (loadError) {
+      setError(loadError.message || 'Could not load categories.');
     } finally {
-      setUploadingEditImage(false);
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const handleSaveEdit = async () => {
-    if (!editingName.trim()) return;
+  useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  const handleAddRoot = async (event) => {
+    event.preventDefault();
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
     try {
-      await api.updateCategory(category.id, {
-        name: editingName.trim(),
-        slug: editingName.trim().toLowerCase().replace(/ /g, '-'),
-        imageUrl: editingImageUrl || undefined,
-      });
-      setEditingId(null);
-      loadCategories();
-    } catch (err) {
-      alert(err.message || 'Update failed.');
+      await api.createCategory({ name: cleanName, slug: slugify(cleanName), imageUrl: imageUrl || undefined, order: categories.length + 1, parentId: null });
+      setName('');
+      setImageUrl('');
+      setNotice(`${cleanName} was created.`);
+      await loadCategories();
+    } catch (saveError) {
+      setError(saveError.message || 'Could not create category.');
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete "${category.name}" and ALL its sub-categories recursively?`)) return;
-    try {
-      await api.deleteCategory(category.id);
-      loadCategories();
-    } catch (err) {
-      alert(err.message || 'Delete failed.');
-    }
-  };
-
-  const handleAddSub = async (e) => {
-    e.preventDefault();
-    if (!newSubName.trim()) return;
-    try {
-      await api.createCategory({
-        name: newSubName.trim(),
-        slug: newSubName.trim().toLowerCase().replace(/ /g, '-'),
-        order: category.subCategories?.length ? category.subCategories.length + 1 : 1,
-        parentId: category.id
-      });
-      setNewSubName('');
-      setIsAddingSub(false);
-      setExpanded(true);
-      loadCategories();
-    } catch (err) {
-      alert(err.message || 'Add sub-category failed.');
-    }
-  };
-
-  const handleMove = async (dir) => {
-    // Note: Reordering is tricky in a generic tree without passing the siblings array, 
-    // but the backend reorder method accepts a flat list of ID and order. 
-    // For simplicity, we can do a quick alert if not implemented for deep nodes, 
-    // or just let it be. Let's omit deep reordering for now to keep it stable, or hide buttons.
-    alert("Reordering in N-level tree is not fully supported from this UI button yet. Please use drag-n-drop or update order manually.");
   };
 
   return (
-    <div className="flex flex-col border-b border-slate-100 last:border-0 bg-white">
-      {/* Node Row */}
-      <div 
-        className="p-3 flex items-center justify-between hover:bg-slate-50/50 transition-colors group"
-        style={{ paddingLeft: `${pl + 16}px` }}
-      >
-        <div className="flex items-center gap-3">
-          {/* Expand toggle */}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className={`p-1 rounded-md transition-colors ${hasChildren ? 'text-brand-500 hover:bg-brand-50' : 'text-transparent pointer-events-none'}`}
-          >
-            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
+    <section className="space-y-6">
+      <header>
+        <h2 className="text-xl font-extrabold tracking-tight text-slate-800">Categories</h2>
+        <p className="mt-1 text-sm text-slate-500">Create and customize categories and subcategories, including their cover images.</p>
+      </header>
+      {(error || notice) && <div role={error ? 'alert' : 'status'} className={`rounded-xl border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{error || notice}</div>}
 
-          {editingId === category.id ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="text"
-                value={editingName}
-                onChange={e => setEditingName(e.target.value)}
-                className="text-xs border border-slate-200 rounded-lg py-1.5 px-3 focus:outline-none focus:border-brand-500 min-w-[200px]"
-              />
-              <div className="flex items-center gap-2">
-                {editingImageUrl && (
-                  <img src={editingImageUrl} alt="edit-cat" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
-                )}
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    disabled={uploadingEditImage}
-                  />
-                  <div className="text-[10px] bg-slate-100 px-2 py-1 rounded-md text-slate-600 hover:bg-slate-200 flex items-center gap-1">
-                    {uploadingEditImage ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                  </div>
-                </label>
-                <button onClick={handleSaveEdit} className="p-1.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => setEditingId(null)} className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              {category.imageUrl ? (
-                <img src={category.imageUrl} alt={category.name} className="w-8 h-8 rounded-lg object-cover border border-slate-100 shadow-sm" />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shadow-sm">
-                  <ImageIcon className="w-3 h-3 text-slate-300" />
-                </div>
-              )}
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap">
-                  <span>{category.name}</span>
-                  {hasChildren && <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px] font-bold" title="Subcategories count">{category.subCategories.length} sub</span>}
-                  <span className="bg-brand-50 text-brand-600 border border-brand-100/80 px-1.5 py-0.5 rounded-md text-[9px] font-semibold" title="Direct / Total products count">
-                    {category.directProductCount || 0} direct / {category.totalProductCount || 0} total
-                  </span>
-                </span>
-                <span className="text-[10px] text-slate-400">/{category.slug}</span>
-              </div>
-            </div>
-          )}
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+        <form onSubmit={handleAddRoot} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-4 xl:col-span-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Layers className="h-5 w-5" /></span>
+            <div><h3 className="font-bold text-slate-800">New root category</h3><p className="text-xs text-slate-500">Top level in your store</p></div>
+          </div>
+          <label className="block space-y-1.5 text-xs font-semibold text-slate-600">Category name
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="For example, Women" required maxLength={80} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </label>
+          <div className="space-y-1.5 text-xs font-semibold text-slate-600">Cover image <ImagePicker value={imageUrl} onChange={setImageUrl} disabled={saving} /></div>
+          {name.trim() && <p className="text-xs text-slate-400">URL preview: /{slugify(name)}</p>}
+          <button type="submit" disabled={saving || !name.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50">
+            {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}{saving ? 'Creating…' : 'Create category'}
+          </button>
+        </form>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-8">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div><h3 className="font-bold text-slate-800">Category hierarchy</h3><p className="mt-0.5 text-xs text-slate-500">Add children or edit a category to change its image and name.</p></div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">{categories.length} root{categories.length === 1 ? '' : 's'}</span>
+          </div>
+          {loading ? <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-500"><Loader className="h-4 w-4 animate-spin" />Loading categories…</div> : categories.length === 0 ? (
+            <div className="p-12 text-center"><FolderPlus className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-semibold text-slate-600">No categories yet</p><p className="mt-1 text-sm text-slate-400">Create a root category to start organizing your products.</p></div>
+          ) : <div>{categories.map((category) => <CategoryNode key={category.id} category={category} depth={0} reload={loadCategories} />)}</div>}
         </div>
+      </div>
+    </section>
+  );
+}
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => setIsAddingSub(!isAddingSub)}
-            className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-600 transition-colors"
-            title="Add Sub-Category"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          <div className="w-px h-4 bg-slate-200 mx-1"></div>
-          <button
-            onClick={handleStartEdit}
-            className="p-1.5 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
-            title="Edit Category"
-          >
-            <Edit className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-            title="Delete Category"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+function CategoryNode({ category, depth, reload }) {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const [mode, setMode] = useState('');
+  const [name, setName] = useState(category.name);
+  const [imageUrl, setImageUrl] = useState(category.imageUrl || '');
+  const [subName, setSubName] = useState('');
+  const [subImageUrl, setSubImageUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const children = category.subCategories || [];
+
+  const save = async (event) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true); setError('');
+    try {
+      await api.updateCategory(category.id, { name: name.trim(), slug: slugify(name), imageUrl });
+      setMode(''); await reload();
+    } catch (saveError) { setError(saveError.message || 'Could not update category.'); }
+    finally { setSaving(false); }
+  };
+
+  const addChild = async (event) => {
+    event.preventDefault();
+    if (!subName.trim()) return;
+    setSaving(true); setError('');
+    try {
+      await api.createCategory({ name: subName.trim(), slug: slugify(subName), imageUrl: subImageUrl || undefined, order: children.length + 1, parentId: category.id });
+      setSubName(''); setSubImageUrl(''); setMode(''); setExpanded(true); await reload();
+    } catch (saveError) { setError(saveError.message || 'Could not create subcategory.'); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Delete “${category.name}” and all of its subcategories?`)) return;
+    setError('');
+    try { await api.deleteCategory(category.id); await reload(); }
+    catch (deleteError) { setError(deleteError.message || 'Could not delete category.'); }
+  };
+
+  return (
+    <div className="border-b border-slate-100 last:border-b-0">
+      <div className="group flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-slate-50" style={{ paddingLeft: `${16 + depth * 22}px` }}>
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-label={expanded ? 'Collapse subcategories' : 'Expand subcategories'} className={`rounded p-1 ${children.length ? 'text-slate-500 hover:bg-slate-200' : 'invisible'}`}>
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        {category.imageUrl ? <img src={category.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 object-cover" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></div>}
+        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{category.name}</p><p className="truncate text-[11px] text-slate-400">/{category.slug}{children.length > 0 ? ` · ${children.length} subcategor${children.length === 1 ? 'y' : 'ies'}` : ''}</p></div>
+        <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-60 sm:group-hover:opacity-100">
+          <button type="button" onClick={() => { setMode(mode === 'add' ? '' : 'add'); setError(''); }} title="Add subcategory" className="rounded-lg p-2 text-brand-600 hover:bg-brand-50"><Plus className="h-4 w-4" /></button>
+          <button type="button" onClick={() => { setName(category.name); setImageUrl(category.imageUrl || ''); setMode(mode === 'edit' ? '' : 'edit'); setError(''); }} title="Edit category" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
+          <button type="button" onClick={remove} title="Delete category" className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
 
-      {/* Add Sub Category Form Inline */}
-      {isAddingSub && (
-        <div className="bg-brand-50/50 p-3 border-y border-brand-100 flex items-center gap-3" style={{ paddingLeft: `${pl + 16 + 28}px` }}>
-          <FolderPlus className="w-4 h-4 text-brand-400 shrink-0" />
-          <form onSubmit={handleAddSub} className="flex-1 flex items-center gap-2">
-            <input
-              type="text"
-              autoFocus
-              value={newSubName}
-              onChange={e => setNewSubName(e.target.value)}
-              placeholder={`Add nested category under ${category.name}...`}
-              className="flex-1 text-xs border border-brand-200 rounded-lg py-1.5 px-3 focus:outline-none focus:border-brand-500"
-            />
-            <button type="submit" className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-[10px] font-bold rounded-lg transition-colors">Save</button>
-            <button type="button" onClick={() => setIsAddingSub(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg transition-colors">Cancel</button>
-          </form>
-        </div>
-      )}
-
-      {/* Children rendering */}
-      {expanded && hasChildren && (
-        <div className="flex flex-col relative before:absolute before:left-[27px] before:top-0 before:bottom-0 before:w-px before:bg-slate-200">
-          {category.subCategories.map((sub, idx) => (
-            <CategoryNode 
-              key={sub.id} 
-              category={sub} 
-              depth={depth + 1} 
-              index={idx} 
-              total={category.subCategories.length} 
-              loadCategories={loadCategories} 
-            />
-          ))}
-        </div>
-      )}
+      {error && <p role="alert" className="px-5 pb-3 text-xs text-red-600" style={{ paddingLeft: `${52 + depth * 22}px` }}>{error}</p>}
+      {mode === 'edit' && <form onSubmit={save} className="space-y-4 bg-slate-50 px-5 py-4" style={{ marginLeft: `${51 + depth * 22}px` }}>
+        <label className="block space-y-1 text-xs font-semibold text-slate-600">Name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} className="w-full max-w-lg rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal" /></label>
+        <div className="space-y-1 text-xs font-semibold text-slate-600">Cover image<ImagePicker value={imageUrl} onChange={setImageUrl} disabled={saving} /></div>
+        <div className="flex gap-2"><button disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Save changes</button><button type="button" onClick={() => setMode('')} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel</button></div>
+      </form>}
+      {mode === 'add' && <form onSubmit={addChild} className="space-y-4 bg-brand-50/50 px-5 py-4" style={{ marginLeft: `${51 + depth * 22}px` }}>
+        <div><p className="text-sm font-bold text-slate-700">New subcategory</p><p className="text-xs text-slate-500">Under {category.name}</p></div>
+        <label className="block space-y-1 text-xs font-semibold text-slate-600">Name<input autoFocus value={subName} onChange={(event) => setSubName(event.target.value)} placeholder="For example, Dresses" required maxLength={80} className="w-full max-w-lg rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal" /></label>
+        <div className="space-y-1 text-xs font-semibold text-slate-600">Cover image<ImagePicker value={subImageUrl} onChange={setSubImageUrl} disabled={saving} /></div>
+        <div className="flex gap-2"><button disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}Create subcategory</button><button type="button" onClick={() => setMode('')} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel</button></div>
+      </form>}
+      {expanded && children.map((child) => <CategoryNode key={child.id} category={child} depth={depth + 1} reload={reload} />)}
     </div>
   );
 }
