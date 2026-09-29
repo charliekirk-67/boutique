@@ -1314,7 +1314,7 @@ export class AdminController {
       let url: string;
 
       if (isDevelopment) {
-        url = await CloudinaryService.uploadFile(file.buffer, 'marcos', file.mimetype);
+        url = await CloudinaryService.uploadFile(file.buffer, env.CLOUDINARY_UPLOAD_FOLDER, file.mimetype);
       } else {
         const fileKey = `uploads/${Date.now()}-${file.originalname}`;
         url = await R2Service.uploadFile(file.buffer, fileKey, file.mimetype);
