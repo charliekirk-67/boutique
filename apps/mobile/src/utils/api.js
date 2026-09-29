@@ -8,7 +8,7 @@ import Constants from 'expo-constants';
 // so that testing on physical mobile devices connects successfully to the server.
 // Toggle to true to connect Expo Go / Dev directly to live Render cloud backend
 const USE_CLOUD_BACKEND = true;
-const CLOUD_BACKEND_URL = 'https://marcos-backend-live.onrender.com/api/v1';
+const CLOUD_BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || 'https://marcos-backend-live.onrender.com/api/v1';
 
 const getApiUrl = () => {
   // Always use the live cloud backend if USE_CLOUD_BACKEND is enabled or if in production build

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MARCOS",
+    "name": "MARCOS Staging",
     "slug": "marcos-boutique",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,7 +16,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.marcos.boutique",
+      "package": "com.marcos.boutique.staging",
       "versionCode": 2,
       "config": {
         "googleMaps": {

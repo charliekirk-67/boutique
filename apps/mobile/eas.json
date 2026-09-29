@@ -8,6 +8,12 @@
         "buildType": "apk"
       }
     },
+    "staging": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://187.127.190.2:5100/api/v1"
+      }
+    },
     "preview-local": {
       "android": {
         "buildType": "apk"
